@@ -1,0 +1,774 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  LayoutDashboard, TrendingUp, Wallet, UtensilsCrossed, Megaphone, 
+  ShieldAlert, MessageSquare, X, Bell, RefreshCw, 
+  ArrowUpRight, ArrowDownRight, Wifi, WifiOff, 
+  AlertTriangle, Info, LogIn, Sparkles, LogOut, 
+  Menu as MenuIcon, UserCog, Mail, ShoppingBag, Calendar,
+  Settings, Shield, CheckCircle, Trash2, ChevronRight, HelpCircle,
+  Target, BarChart3, ChevronDown, ChevronUp, PieChart as PieIcon,
+  Store, Truck, Banknote, CreditCard, Users, Search, Filter,
+  ChefHat, Percent, Activity, Lightbulb, Receipt, CalendarCheck, FileText,
+  DollarSign, Brain, Zap, AlertOctagon, TrendingDown, MousePointerClick,
+  Calculator, Coins, BarChart4, MapPin, Building2, Loader2
+} from 'lucide-react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  BarChart, Bar, Legend, PieChart, Pie, Cell, AreaChart, Area, ComposedChart
+} from 'recharts';
+
+// --- KONFIGURASI ---
+// Ganti URL ini nanti dengan URL Google Apps Script Anda sendiri saat sudah di-deploy
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDKDRq6fQ8Lwgj-gZLhM_4iiJTaxFZKriY1ZZ4oC6kMjqy8QjKI8qX3Zc6EtaiDm8A/exec';
+const ADMIN_EMAIL = "elangrimbawan123@gmail.com";
+
+// --- TIPE DATA ---
+interface FinancialData {
+  Pendapatan: number;
+  Pengeluaran: number;
+  Laba_Rugi: number;
+  Saldo_Kas: number;
+  Kas_Masuk?: number; 
+  Kas_Keluar?: number; 
+}
+
+interface SalesChannels {
+  ShopeeFood: number;
+  GoFood: number;
+  GrabFood: number;
+  Offline_Cash: number;
+  QRIS: number;
+}
+
+interface ExpenseCategories {
+  Bahan_Baku: number;
+  Operasional: number;
+  Gaji_Tetap: number;
+  Lain_Lain: number;
+}
+
+interface SalesPotentialData {
+  target_revenue: number;
+  actual_revenue: number;
+  achievement_percentage: string;
+  gap_value: number;
+  forecast_eom: number;
+}
+
+interface ProductItem {
+  name: string;
+  qty: number;
+  sales: number;
+}
+
+interface SalesDataPoint {
+  month: string;
+  actual: number;
+  predicted: number;
+}
+
+interface SalesPrediction {
+  chart_data: SalesDataPoint[];
+}
+
+interface BillItem {
+  nama_tagihan: string;
+  target_tagihan: number; 
+  nominal_terbayar: number;
+  sisa_tagihan: number;
+  status: string;
+}
+
+interface FraudItem {
+  id: number;
+  risk: string;
+  msg: string;
+}
+
+interface AppData {
+  status: string;
+  filter_applied: string;
+  period?: { start: string, end: string };
+  financials: FinancialData;
+  sales_channels: SalesChannels;
+  expense_categories: ExpenseCategories;
+  sales_potential: SalesPotentialData;
+  fixed_costs_detail?: BillItem[];
+  total_unpaid_bills?: number;
+  best_sellers: ProductItem[];
+  least_sellers: ProductItem[];
+  sales_prediction: SalesPrediction;
+  fraud_alerts: FraudItem[];
+  ai_insight: string;
+}
+
+interface UserProfile {
+  name: string;
+  email: string;
+  businessName: string;
+}
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: Date;
+}
+
+interface AppNotification {
+  id: string;
+  type: 'security' | 'info' | 'success' | 'warning';
+  title: string;
+  message: string;
+  timestamp: Date;
+  read: boolean;
+}
+
+// Interface AI Engine
+interface BusinessHealth {
+  status: 'AMAN' | 'WASPADA' | 'BAHAYA';
+  highlight: string;
+  actions: string[];
+  trend: string;
+  themeColor: string;
+  icon: any;
+  profitMargin: number;
+  bepValue: number;
+  dailyTarget: number;
+  dailyBudget: number;
+  topChannel: string;
+  adBudget: number;
+}
+
+// --- UTILS ---
+const formatCurrency = (val: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
+
+const getMockData = (): AppData => ({
+  status: "success",
+  filter_applied: "MTD",
+  period: { start: "01 Jan 2026", end: "31 Jan 2026" },
+  financials: { Pendapatan: 0, Pengeluaran: 0, Laba_Rugi: 0, Saldo_Kas: 0, Kas_Masuk: 0, Kas_Keluar: 0 },
+  sales_channels: { ShopeeFood: 0, GoFood: 0, GrabFood: 0, Offline_Cash: 0, QRIS: 0 },
+  expense_categories: { Bahan_Baku: 0, Operasional: 0, Gaji_Tetap: 0, Lain_Lain: 0 },
+  sales_potential: { target_revenue: 0, actual_revenue: 0, achievement_percentage: "0.0", gap_value: 0, forecast_eom: 0 },
+  fixed_costs_detail: [],
+  total_unpaid_bills: 0,
+  best_sellers: [],
+  least_sellers: [],
+  sales_prediction: { chart_data: [] },
+  fraud_alerts: [{ id: 0, risk: 'Safe', msg: 'Aman' }],
+  ai_insight: "Belum ada analisis."
+});
+
+// --- CULINARY PRO INTELLIGENCE ENGINE LOGIC ---
+const analyzeBusinessHealth = (data: AppData): BusinessHealth => {
+  const saldoKas = data.financials.Saldo_Kas || 0;
+  const unpaidBills = data.total_unpaid_bills || 0;
+  const cashGap = saldoKas - unpaidBills;
+  const revenue = data.financials.Pendapatan || 1; 
+  const expenses = data.financials.Pengeluaran || 0;
+  const profit = data.financials.Laba_Rugi || 0;
+  
+  const target = data.sales_potential.target_revenue;
+  const actual = data.sales_potential.actual_revenue;
+  const forecast = data.sales_potential.forecast_eom || target;
+  const remainingTarget = Math.max(0, target - actual);
+  
+  // Logic Tanggal
+  const today = new Date();
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const remainingDays = Math.max(1, lastDay.getDate() - today.getDate());
+
+  // 1. BEP Calculation
+  const fixedCost = data.expense_categories.Gaji_Tetap + (unpaidBills > 0 ? unpaidBills : 0);
+  const variableCost = data.expense_categories.Bahan_Baku + data.expense_categories.Operasional;
+  const variableRatio = revenue > 0 ? variableCost / revenue : 0;
+  const contributionMarginRatio = 1 - variableRatio;
+  const bepValue = contributionMarginRatio > 0 ? fixedCost / contributionMarginRatio : 0;
+
+  // 2. Metrics Calculation (UPDATED DAILY BUDGET LOGIC)
+  const profitMargin = (profit / revenue) * 100;
+  const dailyTarget = remainingTarget / remainingDays;
+  const maxMonthlyBudget = forecast * 0.80; 
+  const remainingBudget = Math.max(0, maxMonthlyBudget - expenses);
+  const dailyBudget = remainingBudget / remainingDays;
+
+  // 3. Marketing
+  const channels = Object.entries(data.sales_channels).sort(([,a], [,b]) => b - a);
+  const topChannel = channels[0][0]; 
+  const adBudget = revenue * 0.05; 
+
+  // 4. Status Determination
+  let status: 'AMAN' | 'WASPADA' | 'BAHAYA' = 'AMAN';
+  let highlight = "Bisnis Stabil.";
+  let trend = "Persaingan Maguwoharjo Normal.";
+  let themeColor = "bg-emerald-600";
+  let Icon = CheckCircle;
+  let actions = [];
+
+  const offlineSales = data.sales_channels.Offline_Cash + data.sales_channels.QRIS;
+  const onlineSales = data.sales_channels.ShopeeFood + data.sales_channels.GoFood + data.sales_channels.GrabFood;
+
+  if (cashGap < 0) {
+    status = 'BAHAYA';
+    highlight = `Mas Elang, Alert Cashflow! Defisit ${formatCurrency(Math.abs(cashGap))}.`;
+    actions = ["STOP BELANJA stok non-urgent.", "Push broadcast WA pelanggan.", "Nego tempo supplier."];
+    themeColor = "bg-rose-600";
+    Icon = AlertOctagon;
+  } else if (offlineSales < (onlineSales * 0.3)) {
+    status = 'WASPADA';
+    highlight = "Offline Terlalu Sepi.";
+    actions = ["Pasang Banner Paket Mahasiswa.", "Cek harga kompetitor.", "Promo Dine-in."];
+    themeColor = "bg-amber-500";
+    Icon = Building2;
+  } else if (profitMargin < 15) {
+     status = 'WASPADA';
+     highlight = "Margin Tipis.";
+     actions = ["Audit dapur (Food Waste).", "Kurangi porsi sedikit.", "Naikkan harga minuman."];
+     themeColor = "bg-orange-500";
+     Icon = TrendingDown;
+  } else {
+    status = 'AMAN';
+    highlight = `Performa Mantap! Surplus ${formatCurrency(cashGap)}.`;
+    actions = ["Sisihkan laba perbaikan interior.", "Iklan GrabFood weekend.", "Review bonus staff."];
+    themeColor = "bg-emerald-600";
+    Icon = TrendingUp;
+  }
+
+  return { status, highlight, actions, trend, themeColor, icon: Icon, profitMargin, bepValue, dailyTarget, dailyBudget, topChannel, adBudget };
+};
+
+// --- HOOKS ---
+function useData(filter: string) {
+  const [data, setData] = useState<AppData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const url = `${APPS_SCRIPT_URL}?filter=${encodeURIComponent(filter)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Gagal mengambil data');
+      const json = await res.json();
+      setData(json);
+    } catch (err: any) {
+      console.error(err);
+      setError(err);
+      setData(getMockData()); 
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, [filter]);
+  return { data, loading, error, refetch: fetchData };
+}
+
+// --- UI COMPONENTS ---
+const Card = ({ children, className = '', onClick }: { children: React.ReactNode; className?: string, onClick?: () => void }) => (
+  <div onClick={onClick} className={`bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''} ${className}`}>{children}</div>
+);
+const Badge = ({ children, variant = 'default', className = '' }: any) => {
+  const variants: any = { default: "bg-blue-100 text-blue-700", success: "bg-emerald-100 text-emerald-700", warning: "bg-amber-100 text-amber-700", destructive: "bg-rose-100 text-rose-700", outline: "border border-slate-200 text-slate-600" };
+  return <div className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${variants[variant]} ${className}`}>{children}</div>;
+};
+const Button = ({ children, variant = 'primary', size = 'md', className = '', disabled, onClick, ...props }: any) => {
+  const variants: any = { primary: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm", outline: "border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-900", ghost: "hover:bg-slate-100 hover:text-slate-900", destructive: "bg-red-500 text-white hover:bg-red-600", success: "bg-emerald-600 text-white hover:bg-emerald-700" };
+  const sizes: any = { sm: "h-8 px-3 text-xs", md: "h-10 px-4 py-2", lg: "h-11 px-8", icon: "h-10 w-10 p-2" };
+  return (
+    <button className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none disabled:opacity-50 disabled:pointer-events-none active:scale-95 ${variants[variant]} ${sizes[size]} ${className}`} disabled={disabled} onClick={onClick} {...props}>{children}</button>
+  );
+};
+const Input = (props: any) => <input {...props} className={`flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${props.className}`} />;
+const Label = ({ children }: any) => <label className="text-sm font-medium mb-2 block text-slate-700">{children}</label>;
+
+// --- SECTIONS ---
+function FinancialSection({ data }: { data: AppData }) {
+  const [expanded, setExpanded] = useState<'revenue' | 'expense' | 'cash' | null>(null);
+  const revenueTotal = Object.values(data.sales_channels).reduce((a, b) => a + b, 0);
+  const expenseTotal = Object.values(data.expense_categories).reduce((a, b) => a + b, 0);
+
+  const coreMetrics = [
+    { id: 'revenue', label: 'Total Pendapatan', value: data.financials.Pendapatan, icon: Wallet, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', breakdown: { ...data.sales_channels, Total: revenueTotal } },
+    { id: 'expense', label: 'Total Pengeluaran', value: data.financials.Pengeluaran, icon: ArrowUpRight, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-100', breakdown: { ...data.expense_categories, Total: expenseTotal } },
+    { id: 'profit', label: 'Laba Rugi Bersih', value: data.financials.Laba_Rugi, icon: TrendingUp, color: data.financials.Laba_Rugi >= 0 ? 'text-emerald-600' : 'text-red-600', bg: data.financials.Laba_Rugi >= 0 ? 'bg-emerald-50' : 'bg-red-50', border: data.financials.Laba_Rugi >= 0 ? 'border-emerald-100' : 'border-red-100' },
+  ];
+
+  const renderBreakdown = (metricId: string, breakdownData: any) => {
+    let items = [];
+    if (metricId === 'revenue') {
+       items = [{ label: 'ShopeeFood', val: breakdownData.ShopeeFood, col: '#EE4D2D' }, { label: 'GoFood', val: breakdownData.GoFood, col: '#00AA13' }, { label: 'GrabFood', val: breakdownData.GrabFood, col: '#00B14F' }, { label: 'Offline Cash', val: breakdownData.Offline_Cash, col: '#3B82F6' }, { label: 'QRIS', val: breakdownData.QRIS, col: '#F97316' }].sort((a,b) => b.val - a.val);
+    } else if (metricId === 'expense') {
+       items = [{ label: 'Bahan Baku', val: breakdownData.Bahan_Baku, col: '#EF4444' }, { label: 'Operasional', val: breakdownData.Operasional, col: '#F59E0B' }, { label: 'Biaya Tetap', val: breakdownData.Gaji_Tetap, col: '#10B981' }, { label: 'Lainnya', val: breakdownData.Lain_Lain, col: '#6366F1' }].sort((a,b) => b.val - a.val);
+    } else if (metricId === 'cash') {
+       items = [{ label: 'Total Kas Masuk', val: data.financials.Kas_Masuk || 0, col: '#10B981' }, { label: 'Total Kas Keluar', val: data.financials.Kas_Keluar || 0, col: '#EF4444' }];
+    }
+    return (
+      <div className="mt-4 pt-4 border-t border-slate-100 animate-in slide-in-from-top-2">
+         <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Breakdown {metricId === 'cash' ? 'Arus Kas' : 'Kategori'}</p>
+         <div className="space-y-2">{items.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-sm"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{backgroundColor: item.col}}></div><span className="text-slate-600">{item.label}</span></div><div className="flex items-center gap-3"><span className="font-bold text-slate-700">{formatCurrency(item.val)}</span>{metricId !== 'cash' && (<span className="text-xs text-slate-400 w-8 text-right">{breakdownData.Total > 0 ? ((item.val / breakdownData.Total) * 100).toFixed(0) + '%' : '0%'}</span>)}</div></div>))}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{coreMetrics.map((m) => (<div key={m.id} className={`bg-white rounded-3xl p-6 shadow-sm border ${m.border} transition-all duration-300 ${expanded === m.id ? 'ring-2 ring-blue-100 scale-[1.01]' : 'hover:shadow-md'}`} onClick={() => m.id !== 'profit' && setExpanded(expanded === m.id ? null : m.id as any)}><div className="flex items-start justify-between cursor-pointer"><div><p className="text-sm font-medium text-slate-500">{m.label}</p><h3 className={`text-2xl lg:text-3xl font-bold mt-1 ${m.color}`}>{formatCurrency(m.value)}</h3></div><div className={`p-3 rounded-2xl ${m.bg}`}><m.icon className={`h-6 w-6 ${m.color}`} /></div></div>{(m.id === 'revenue' || m.id === 'expense') && (<div className="mt-2 text-xs text-slate-400 flex items-center gap-1">{expanded === m.id ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>}{expanded === m.id ? 'Tutup Detail' : 'Klik untuk detail kategori'}</div>)}{expanded === m.id && m.breakdown && renderBreakdown(m.id, m.breakdown)}</div>))}</div>
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`bg-white rounded-2xl p-4 border border-indigo-100 shadow-sm transition-all duration-300 cursor-pointer ${expanded === 'cash' ? 'ring-2 ring-indigo-100' : 'hover:shadow-md'}`} onClick={() => setExpanded(expanded === 'cash' ? null : 'cash')}><div className="flex items-center gap-4"><div className="p-2 rounded-xl bg-indigo-50"><Banknote className="h-5 w-5 text-indigo-600" /></div><div className="flex-1"><p className="text-xs text-slate-500 font-medium">Saldo Kas Akhir</p><p className="text-lg font-bold text-indigo-600">{formatCurrency(data.financials.Saldo_Kas)}</p></div><div className="text-slate-400">{expanded === 'cash' ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}</div></div>{expanded === 'cash' && renderBreakdown('cash', {})}</div>
+          <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-200 flex items-center gap-4"><div className="p-2 rounded-xl bg-amber-50"><AlertTriangle className="h-5 w-5 text-amber-600" /></div><div><p className="text-xs text-slate-500 font-medium">Unpaid Bills (Total Hutang)</p><p className={`text-lg font-bold ${data.total_unpaid_bills && data.total_unpaid_bills > 0 ? 'text-rose-600' : 'text-slate-600'}`}>{formatCurrency(data.total_unpaid_bills || 0)}</p></div></div>
+       </div>
+    </div>
+  );
+}
+
+function SalesPotentialSection({ data }: { data: AppData }) {
+   const [showForecast, setShowForecast] = useState(true); 
+   const actual = data.sales_potential.actual_revenue;
+   const userTarget = data.sales_potential.target_revenue;
+   const chartData = data.sales_prediction?.chart_data || [];
+   const percentAchieved = userTarget > 0 ? ((actual / userTarget) * 100).toFixed(1) : "0";
+   
+   const lastData = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+   const trendText = lastData && lastData.predicted > lastData.actual 
+      ? "Tren menunjukkan potensi kenaikan di akhir bulan. Maksimalkan promo gajian." 
+      : "Tren cenderung stagnan. Perlu strategi impulsif (diskon kilat).";
+
+   return (
+      <div className="space-y-6">
+         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><div><h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Target className="h-6 w-6 text-indigo-600"/> Sales Potential Analysis</h3><p className="text-xs text-slate-500 mt-1">Lacak pencapaian target dan prediksi pendapatan (Data Bulanan).</p></div></div>
+         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="col-span-1 lg:col-span-1 p-6 flex flex-col justify-between relative bg-gradient-to-br from-white to-indigo-50/50">
+               <div>
+                  <div className="flex justify-between items-start mb-4"><div><p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Target Revenue</p><h2 className="text-2xl font-bold text-slate-800 mt-1">{formatCurrency(userTarget)}</h2></div><div className="p-2 bg-indigo-100 rounded-lg"><GoalFlag className="h-5 w-5 text-indigo-600"/></div></div>
+                  <div className="h-40 w-full relative my-4"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{value: actual, color:'#4f46e5'}, {value: Math.max(0, userTarget-actual), color:'#e2e8f0'}]} cx="50%" cy="50%" innerRadius={50} outerRadius={65} startAngle={90} endAngle={-270} dataKey="value" stroke="none">{[{color:'#4f46e5'}, {color:'#e2e8f0'}].map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie></PieChart></ResponsiveContainer><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-extrabold text-indigo-600">{percentAchieved}%</span></div></div>
+               </div>
+               <div className="space-y-3"><div className="flex justify-between text-sm"><span className="text-slate-500">Tercapai</span><span className="font-bold text-indigo-600">{formatCurrency(actual)}</span></div><div className="flex justify-between text-sm"><span className="text-slate-500">Kekurangan (Gap)</span><span className="font-bold text-rose-500">{formatCurrency(Math.max(0, userTarget - actual))}</span></div><Button variant="outline" size="sm" className="w-full mt-2" onClick={() => setShowForecast(!showForecast)}>{showForecast ? 'Sembunyikan Grafik' : 'Tampilkan Grafik & Analisis'}</Button></div>
+            </Card>
+            <div className={`col-span-1 lg:col-span-2 transition-all duration-500 ease-in-out ${showForecast ? 'opacity-100' : 'opacity-100 lg:col-span-2'}`}>
+               {showForecast ? (
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
+                     <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"><div><h4 className="font-bold text-slate-800 flex items-center gap-2"><Sparkles className="h-4 w-4 text-purple-500"/> AI Forecast Bulanan</h4><p className="text-xs text-slate-500 mt-1">Estimasi pendapatan hingga akhir periode.</p></div><div className="text-right"><p className="text-xs text-slate-400">Prediksi Akhir Bulan</p><p className="text-xl font-bold text-purple-600">{formatCurrency(data.sales_potential.forecast_eom)}</p></div></div>
+                     <div className="flex-1 p-6 min-h-[300px]"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={chartData} margin={{top:10, right:10, left:-20, bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize:12}} /><YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `${v/1000000}M`} tick={{fontSize:12}} /><Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 25px -5px rgba(0, 0, 0, 0.1)'}} formatter={(value:number) => formatCurrency(value)} /><Bar dataKey="actual" name="Aktual" fill="#cbd5e1" barSize={30} radius={[4,4,0,0]} /><Line type="monotone" dataKey="predicted" name="Prediksi AI" stroke="#8b5cf6" strokeWidth={3} dot={{r: 4, fill:'#8b5cf6'}} activeDot={{r: 6}} /></ComposedChart></ResponsiveContainer></div>
+                     <div className="px-6 py-4 bg-purple-50 border-t border-purple-100"><p className="text-xs text-purple-800 font-medium flex items-start gap-2"><TrendingUp className="h-4 w-4 shrink-0 mt-0.5"/><strong>Analisis Grafik:</strong> {trendText}</p></div>
+                  </div>
+               ) : (
+                  <div className="h-full bg-gradient-to-r from-violet-600 to-indigo-600 rounded-3xl p-8 text-white flex flex-col justify-center items-start shadow-lg relative overflow-hidden">
+                     <div className="absolute right-0 top-0 opacity-10"><BarChart4 className="h-48 w-48 -mr-10 -mt-10"/></div>
+                     <div className="relative z-10 w-full"><div className="flex items-center gap-2 mb-4"><Badge className="bg-white/20 text-white border-0 backdrop-blur-md">AI Summary</Badge><span className="text-xs text-indigo-100">Grafik disembunyikan</span></div><div className="grid grid-cols-2 gap-8 mb-6"><div><p className="text-indigo-200 text-sm mb-1">Forecast Akhir Bulan</p><h2 className="text-4xl font-bold tracking-tight">{formatCurrency(data.sales_potential.forecast_eom)}</h2></div><div><p className="text-indigo-200 text-sm mb-1">Status Target</p><div className="text-2xl font-bold flex items-center gap-2">{percentAchieved}% <span className="text-sm font-normal text-indigo-200">Tercapai</span></div></div></div><div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10"><p className="text-sm leading-relaxed font-medium">"{data.ai_insight}"</p></div></div>
+                  </div>
+               )}
+            </div>
+         </div>
+      </div>
+   );
+}
+const GoalFlag = ({className}:any) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-8a2 2 0 012-2h14a2 2 0 012 2v8M3 21a2 2 0 002 2h14a2 2 0 002-2m-2 0h2m-2-2v-8m0 0V5a2 2 0 012-2h-6a2 2 0 01-2 2H5a2 2 0 01-2-2v6a2 2 0 012 2h2v4h10v-4" /></svg>;
+
+function BillTrackerSection({ data }: { data: AppData }) {
+   const bills = data.fixed_costs_detail || [];
+   const totalUnpaid = data.total_unpaid_bills || 0;
+   
+   return (
+     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Receipt className="h-6 w-6 text-rose-600"/> Monthly Fixed Obligations</h3>{totalUnpaid > 0 ? (<div className="bg-rose-100 text-rose-700 px-4 py-2 rounded-xl border border-rose-200 shadow-sm animate-pulse"><span className="text-xs font-bold uppercase tracking-wide mr-2">Total Hutang</span><span className="text-lg font-extrabold">{formatCurrency(totalUnpaid)}</span></div>) : (<Badge variant="success" className="px-3 py-1 bg-emerald-100 text-emerald-700">Semua Lunas 🎉</Badge>)}</div>
+        <Card className="p-0 border-rose-100"><div className="bg-rose-50/50 p-4 border-b border-rose-100 flex items-center gap-2"><Info className="h-4 w-4 text-rose-500"/><p className="text-xs text-rose-700">Daftar tagihan ini tercatat otomatis dalam kategori <strong>Biaya Tetap</strong>.</p></div><div className="divide-y divide-slate-50">{bills.length === 0 ? (<div className="p-8 text-center text-slate-400">Tidak ada tagihan bulan ini.</div>) : (bills.map((bill, idx) => { const progress = bill.target_tagihan > 0 ? (bill.nominal_terbayar / bill.target_tagihan) * 100 : 0; const isPaid = bill.sisa_tagihan <= 0; return (<div key={idx} className="p-4 md:p-6 hover:bg-slate-50 transition-colors"><div className="flex justify-between items-start mb-2"><div><h4 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="h-4 w-4 text-slate-500"/> {bill.nama_tagihan}</h4><div className="text-xs text-slate-500 mt-1">Target: <span className="font-medium text-slate-700">{formatCurrency(bill.target_tagihan)}</span></div></div><div className="text-right"><Badge variant={isPaid ? 'success' : 'destructive'} className="mb-1">{isPaid ? 'LUNAS' : 'BELUM LUNAS'}</Badge><div className="text-xs text-slate-400 font-medium">{isPaid ? 'Selesai' : `Sisa: ${formatCurrency(bill.sisa_tagihan)}`}</div></div></div><div className="relative pt-2"><div className="flex justify-between text-[10px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wide"><span>Terbayar: {formatCurrency(bill.nominal_terbayar)}</span><span>{progress.toFixed(0)}%</span></div><div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner"><div className={`h-full rounded-full transition-all duration-1000 ease-out relative ${isPaid ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-gradient-to-r from-rose-400 to-rose-600'}`} style={{ width: `${progress}%` }}><div className="absolute top-0 right-0 bottom-0 w-1 bg-white/30 skew-x-12 transform translate-x-1"></div></div></div></div></div>) }))}</div></Card>
+     </div>
+   )
+}
+
+function RecommendationCenter({ data }: { data: AppData }) {
+   const [activeTab, setActiveTab] = useState<'pairing' | 'promo' | 'fraud'>('pairing');
+   const bestSeller = (data.best_sellers && data.best_sellers.length > 0) ? data.best_sellers[0] : { name: 'Belum ada data', sales: 0, qty: 0 };
+   
+   return (
+      <div className="space-y-4">
+         <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Lightbulb className="h-6 w-6 text-yellow-500"/> Recommendation Center</h3>
+         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="flex border-b border-slate-100"><button onClick={() => setActiveTab('pairing')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'pairing' ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}><UtensilsCrossed className="h-4 w-4"/> Menu Strategy</button><button onClick={() => setActiveTab('promo')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'promo' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><Megaphone className="h-4 w-4"/> Smart Promotion</button><button onClick={() => setActiveTab('fraud')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'fraud' ? 'bg-rose-50 text-rose-600 border-b-2 border-rose-600' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldAlert className="h-4 w-4"/> Fraud & Health</button></div>
+            <div className="p-6 min-h-[300px]">
+               {activeTab === 'pairing' && (
+                  <div className="animate-in fade-in grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div><h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-emerald-500"/> Analisis Menu Terlaris</h4><div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mb-4"><div className="flex justify-between items-center mb-2"><span className="font-bold text-lg text-emerald-900">{bestSeller.name}</span><Badge variant="success">{bestSeller.qty} Terjual</Badge></div><p className="text-sm text-emerald-700">Kontribusi Sales: {formatCurrency(bestSeller.sales)}</p></div><div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100"><h5 className="font-bold text-indigo-900 text-sm mb-2 flex items-center gap-2"><Sparkles className="h-3 w-3"/> AI Recommendation</h5><p className="text-xs text-indigo-700 leading-relaxed">Menu ini adalah "Hero Product". Pastikan stok bahan baku selalu aman.</p></div></div>
+                     <div><h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><ArrowDownRight className="h-4 w-4 text-rose-500"/> Analisis Menu Kurang Laku</h4>{(data.least_sellers || []).length > 0 ? (<div className="space-y-3">{(data.least_sellers || []).slice(0,3).map((item, i) => (<div key={i} className="flex justify-between items-center p-3 border rounded-lg hover:bg-slate-50"><span className="text-slate-700 font-medium">{item.name}</span><span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">{item.qty} terjual</span></div>))}</div>) : <p className="text-slate-400 italic">Data menu kurang laku belum tersedia.</p>}</div>
+                  </div>
+               )}
+               {activeTab === 'promo' && (
+                  <div className="animate-in fade-in space-y-6"><div className="bg-blue-50 p-6 rounded-2xl"><h4 className="font-bold text-blue-900 mb-2">Target Promosi Efektif</h4><p className="text-sm text-blue-700">AI menyarankan budget maksimal 5% dari omset untuk iklan bulan ini agar ROI tetap positif.</p></div></div>
+               )}
+               {activeTab === 'fraud' && (
+                  <div className="animate-in fade-in"><div className="flex items-center justify-between mb-6"><h4 className="font-bold text-slate-800">Health Check Report</h4></div><div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">Sistem keamanan berjalan normal. Tidak ada aktivitas mencurigakan yang signifikan.</div></div>
+               )}
+            </div>
+         </div>
+      </div>
+   );
+}
+
+function AiCommandCenter({ data }: { data: AppData }) {
+  const health = analyzeBusinessHealth(data);
+  const Icon = health.icon;
+  const [activeTab, setActiveTab] = useState<'Profit' | 'Growth' | 'Cash'>('Profit');
+
+  return (
+    <div className="w-full mt-10 mb-20 animate-in slide-in-from-bottom-8 duration-700">
+      <div className="relative overflow-hidden rounded-3xl shadow-2xl border border-slate-200 bg-white">
+        {/* Header - Always Visible */}
+        <div className={`${health.themeColor} px-8 py-6 flex flex-col md:flex-row md:items-center justify-between text-white relative overflow-hidden`}>
+           <div className="absolute top-0 right-0 p-4 opacity-10"><Brain className="h-40 w-40 transform rotate-12"/></div>
+           <div className="relative z-10"><div className="flex items-center gap-3 mb-2"><div className="p-2 bg-white/20 rounded-xl backdrop-blur-md"><Zap className="h-6 w-6 text-white" /></div><span className="font-bold tracking-widest text-xs uppercase opacity-80">CulinaryPro Intelligence Engine (Warung Mbah Marto Edition)</span></div><h2 className="text-3xl font-extrabold leading-tight">{health.highlight}</h2></div>
+           <div className="relative z-10 mt-4 md:mt-0 flex flex-col items-end"><div className="flex items-center gap-2 bg-black/20 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 mb-2"><div className={`w-2.5 h-2.5 rounded-full ${health.status === 'BAHAYA' ? 'animate-ping bg-red-400' : 'bg-emerald-400'}`}></div><span className="text-xs font-bold tracking-wide">STATUS: {health.status}</span></div><p className="text-sm font-medium opacity-90 italic flex items-center gap-2"><TrendingUp className="h-4 w-4"/> {health.trend}</p></div>
+        </div>
+        {/* Dashboard Tabs */}
+        <div className="border-b border-slate-100 bg-slate-50/50 px-8 pt-4">
+           <div className="flex space-x-8">
+              <button onClick={() => setActiveTab('Profit')} className={`pb-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='Profit' ? `border-${health.themeColor.split('-')[1]}-600 text-slate-800` : 'border-transparent text-slate-400 hover:text-slate-600'}`}><PieIcon className="h-4 w-4"/> Profit & BEP</button>
+              <button onClick={() => setActiveTab('Growth')} className={`pb-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='Growth' ? `border-${health.themeColor.split('-')[1]}-600 text-slate-800` : 'border-transparent text-slate-400 hover:text-slate-600'}`}><Megaphone className="h-4 w-4"/> Growth (Offline vs Online)</button>
+              <button onClick={() => setActiveTab('Cash')} className={`pb-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='Cash' ? `border-${health.themeColor.split('-')[1]}-600 text-slate-800` : 'border-transparent text-slate-400 hover:text-slate-600'}`}><Calculator className="h-4 w-4"/> Cash Flow & Forecast</button>
+           </div>
+        </div>
+        {/* Content Body */}
+        <div className="p-8 bg-slate-50 min-h-[250px]">
+           {activeTab === 'Profit' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
+                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm"><h4 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-4">Analisis Profitabilitas (Ruko Milik Sendiri)</h4><div className="flex items-end gap-2 mb-2"><h3 className={`text-4xl font-bold ${health.profitMargin > 20 ? 'text-emerald-600' : 'text-amber-500'}`}>{health.profitMargin.toFixed(1)}%</h3><span className="text-sm text-slate-400 mb-1.5">Net Profit Margin</span></div><p className="text-sm text-slate-600 leading-relaxed">{health.profitMargin > 20 ? "Margin sangat sehat karena tidak ada beban sewa Ruko. Keunggulan ini harus dipakai untuk berani perang harga dengan SS/Soto Blangkon jika perlu." : "Margin di bawah standar meskipun tanpa beban sewa. Cek inefisiensi di dapur (Food Waste) atau porsi yang terlalu besar."}</p></div>
+                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm"><h4 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-4">Break Even Point (Titik Impas)</h4><div className="flex items-end gap-2 mb-2"><h3 className="text-4xl font-bold text-indigo-600">{formatCurrency(health.bepValue)}</h3><span className="text-sm text-slate-400 mb-1.5">Revenue Needed</span></div><p className="text-sm text-slate-600 leading-relaxed">Titik aman untuk menutup Gaji Karyawan (2 Orang) + Operasional + Tagihan Rumah. {data.financials.Pendapatan > health.bepValue ? <span className="text-emerald-600 font-bold ml-1"> (SUDAH TERCAPAI ✅)</span> : <span className="text-rose-600 font-bold ml-1"> (BELUM TERCAPAI ⚠️)</span>}</p></div>
+              </div>
+           )}
+           {activeTab === 'Growth' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in">
+                 <div className="bg-white p-5 rounded-2xl border border-slate-100"><h5 className="font-bold text-slate-700 flex items-center gap-2 mb-2"><MousePointerClick className="h-4 w-4 text-blue-500"/> Channel Juara</h5><p className="text-2xl font-bold text-slate-800">{health.topChannel}</p><p className="text-xs text-slate-500 mt-1">Fokuskan 80% budget iklan di sini untuk hasil instan.</p></div>
+                 <div className="bg-white p-5 rounded-2xl border border-slate-100"><h5 className="font-bold text-slate-700 flex items-center gap-2 mb-2"><Coins className="h-4 w-4 text-amber-500"/> Rekomendasi Ad Budget</h5><p className="text-2xl font-bold text-slate-800">{formatCurrency(health.adBudget)}</p><p className="text-xs text-slate-500 mt-1">Alokasi aman (5% revenue) untuk iklan online.</p></div>
+                 <div className="bg-white p-5 rounded-2xl border border-slate-100"><h5 className="font-bold text-slate-700 flex items-center gap-2 mb-2"><Store className="h-4 w-4 text-purple-500"/> Strategi Maguwoharjo</h5><ul className="text-sm text-slate-600 space-y-2"><li>• <strong>Target:</strong> Mahasiswa Sanata Dharma & Karyawan</li><li>• <strong>Masalah:</strong> Offline masih sepi.</li><li>• <strong>Solusi:</strong> Spanduk "Paket Hemat Mahasiswa" di depan ruko. Perbaiki pencahayaan agar terlihat buka.</li></ul></div>
+              </div>
+           )}
+           {activeTab === 'Cash' && (
+              <div className="space-y-6 animate-in fade-in">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-6 rounded-2xl border border-emerald-100"><h4 className="font-bold text-emerald-800 mb-1">Target Harian Wajib</h4><h2 className="text-3xl font-extrabold text-emerald-600">{formatCurrency(health.dailyTarget)}</h2><p className="text-sm text-emerald-700 mt-2">Target harian untuk mencapai revenue bulanan.</p></div>
+                    <div className="bg-gradient-to-br from-rose-50 to-orange-50 p-6 rounded-2xl border border-rose-100"><h4 className="font-bold text-rose-800 mb-1">Batas Pengeluaran Harian</h4><h2 className="text-3xl font-extrabold text-rose-600">{formatCurrency(health.dailyBudget)}</h2><p className="text-sm text-rose-700 mt-2">Batas aman belanja pasar harian agar cashflow aman.</p></div>
+                 </div>
+                 <div className="bg-white p-6 rounded-2xl border border-slate-200"><h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">ACTION PLAN (PRIORITAS TINGGI)</h4><div className="space-y-3">{health.actions.map((action, idx) => (<div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100"><div className={`p-1 rounded-full mt-0.5 ${health.status === 'BAHAYA' ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}><CheckCircle className="h-4 w-4"/></div><span className="text-sm font-medium text-slate-700">{action}</span></div>))}</div></div>
+              </div>
+           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- GEMINI INTEGRATION HELPER ---
+async function fetchWithRetry(url: string, options: RequestInit, retries = 5, delay = 1000): Promise<Response> {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok && retries > 0) {
+       throw new Error(`HTTP ${response.status}`);
+    }
+    return response;
+  } catch (err) {
+    if (retries === 0) throw err;
+    await new Promise(res => setTimeout(res, delay));
+    return fetchWithRetry(url, options, retries - 1, delay * 2);
+  }
+}
+
+const generateGeminiResponse = async (query: string, contextData: AppData | null) => {
+  const apiKey = ""; // Injected at runtime
+  const systemPrompt = `
+    Role: Anda adalah "Qian Manager AI", asisten bisnis digital super cerdas yang didukung oleh Gemini Pro untuk Mas Elang Rimbawan, pemilik "Warung Makan Mbah Marto" (Bisnis Kuliner di Maguwoharjo, Yogyakarta).
+    
+    Informasi Pribadi Owner (PENTING - Gunakan jika relevan untuk pendekatan personal):
+    - Nama Owner: Elang Rimbawan
+    - Nama Istri: Octa Nur Hanni Widyaningrum (Mbak Octa)
+    - Nama Anak: Shakeelano Al Qian Aelta (Dek Qian - Inspirasi nama AI ini)
+
+    Personality: Cerdas, Data-Driven, Strategis, tapi santai dan suportif seperti partner bisnis. Anda mampu menjawab segala jenis pertanyaan (General Knowledge & Business Specific).
+    
+    Context Data Bisnis Saat Ini (Live Real-time):
+    ${JSON.stringify(contextData || "Data tidak tersedia. Jawab berdasarkan pengetahuan umum bisnis kuliner.")}
+    
+    Instructions:
+    1. **Pertanyaan Bisnis:** Jika user bertanya soal bisnis (omset, profit, stok, strategi, kompetitor SS/Soto Blangkon), GUNAKAN DATA DI ATAS untuk menjawab secara spesifik dan tajam. Jangan menebak angka jika ada di data.
+    2. **Pertanyaan Umum:** Jika user bertanya hal umum (resep masakan baru, cuaca, motivasi, coding, sejarah, berita terkini, dll), jawablah dengan kapabilitas penuh Anda sebagai AI canggih (Gemini Pro). Berikan jawaban yang mendalam, kreatif, dan cerdas.
+    3. **Tone:** Selalu panggil user "Mas Elang". Gaya bahasa profesional santai, memotivasi, dan "to the point". Jika situasinya tepat (misal membahas motivasi keluarga), boleh menyinggung Mbak Octa atau Dek Qian sebagai penyemangat.
+    4. **Bahasa:** Selalu gunakan Bahasa Indonesia yang natural.
+  `;
+
+  try {
+    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: query }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] }
+      })
+    });
+
+    if (!response.ok) throw new Error('Gemini API Error');
+    const result = await response.json();
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya sedang memproses data. Silakan coba lagi.";
+  } catch (error) {
+    console.error(error);
+    return "Maaf Mas Elang, koneksi ke otak saya sedang gangguan. Namun saya tetap memantau bisnis Anda aman.";
+  }
+};
+
+// --- CHAT ASSISTANT COMPONENT (UPDATED) ---
+function ChatAssistant({ data }: { data: AppData | null }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const initialMsg: ChatMessage = { id: '1', role: 'assistant', text: 'Halo Mas Elang! Saya Qian Manager AI (Powered by Gemini Pro). Saya siap bantu analisis bisnis Warung Mbah Marto atau jawab pertanyaan apapun di dunia ini. Mau tanya apa?', timestamp: new Date() };
+  const [messages, setMessages] = useState<ChatMessage[]>([initialMsg]);
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, isOpen, isTyping]);
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: input, timestamp: new Date() };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsTyping(true);
+
+    // Call Gemini API
+    const replyText = await generateGeminiResponse(userMsg.text, data);
+    
+    setIsTyping(false);
+    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', text: replyText, timestamp: new Date() }]);
+  };
+
+  return (
+    <>
+      <button onClick={() => setIsOpen(!isOpen)} className={`fixed bottom-8 right-8 z-50 p-4 rounded-full shadow-2xl hover:scale-110 transition-transform duration-300 group ${isOpen ? 'bg-red-500 rotate-90' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
+        {isOpen ? <X className="text-white h-6 w-6" /> : <MessageSquare className="text-white h-6 w-6" />}
+      </button>
+      {isOpen && (
+        <div className="fixed bottom-28 right-8 z-50 w-[350px] bg-white rounded-2xl shadow-2xl border border-slate-200 h-[500px] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white flex justify-between items-center shadow-md">
+             <div className="flex items-center gap-3">
+                <div className="p-1.5 bg-white/20 rounded-lg"><Sparkles className="h-5 w-5 text-yellow-300"/></div>
+                <div><h4 className="font-bold text-sm">Qian Manager AI</h4><p className="text-[10px] opacity-90">Powered by Gemini Pro</p></div>
+             </div>
+             <button onClick={() => setMessages([initialMsg])} title="Hapus Chat" className="hover:bg-white/20 p-2 rounded-lg transition-colors"><Trash2 className="h-4 w-4"/></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50" ref={scrollRef}>
+             {messages.map(m => (
+                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                   <div className={`p-3 rounded-2xl text-sm max-w-[85%] shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none'}`}>
+                      {m.text}
+                      <p className={`text-[9px] mt-1.5 ${m.role==='user'?'text-blue-200':'text-slate-400'}`}>{m.timestamp.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
+                   </div>
+                </div>
+             ))}
+             {isTyping && (
+                <div className="flex justify-start">
+                   <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-600"/>
+                      <span className="text-xs text-slate-500 font-medium">Qian sedang berpikir...</span>
+                   </div>
+                </div>
+             )}
+          </div>
+          <div className="p-3 bg-white border-t">
+             <div className="flex gap-2 bg-slate-100 p-1.5 rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <input 
+                  className="flex-1 bg-transparent border-none focus:ring-0 text-sm px-3 outline-none" 
+                  value={input} 
+                  onChange={(e) => setInput(e.target.value)} 
+                  placeholder="Ketik pertanyaan..." 
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
+                  disabled={isTyping}
+                />
+                <button 
+                  onClick={handleSend} 
+                  disabled={isTyping || !input.trim()}
+                  className="p-2 bg-blue-600 rounded-full text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+                >
+                  <ArrowUpRight className="h-4 w-4"/>
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function LoginPage({ onLogin }: { onLogin: (email: string) => void }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setTimeout(() => { if(email === ADMIN_EMAIL) onLogin(email); else alert("Email tidak terdaftar."); setLoading(false); }, 1000);
+  }
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-10 border border-white/50 backdrop-blur-xl">
+        <div className="text-center mb-10"><div className="inline-flex p-4 bg-blue-600 rounded-2xl mb-6 shadow-lg shadow-blue-200 transform hover:rotate-12 transition-transform duration-500"><TrendingUp className="h-10 w-10 text-white"/></div><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Qian Enterprise</h1><p className="text-slate-500">Business Intelligence Dashboard</p></div>
+        <form onSubmit={handleLogin} className="space-y-6"><div className="space-y-2"><Label>Email Administrator</Label><div className="relative group"><Mail className="absolute left-4 top-3 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" /><Input type="email" value={email} onChange={(e:any) => setEmail(e.target.value)} className="pl-12 h-12 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 focus:bg-white transition-all" placeholder="admin@example.com" required /></div></div><Button type="submit" className="w-full h-12 text-lg shadow-lg shadow-blue-200" disabled={loading}>{loading ? <RefreshCw className="h-5 w-5 animate-spin"/> : 'Masuk Dashboard'}</Button></form>
+      </div>
+    </div>
+  )
+}
+
+function ProfileSetupModal({ initialData, onSave, onClose }: any) {
+   const [form, setForm] = useState(initialData || { name: 'Elang Rimbawan', businessName: 'Warung Makan Mbah Marto' });
+   return (
+      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-8 rounded-3xl w-full max-w-lg shadow-2xl"><h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-slate-800"><UserCog className="h-6 w-6 text-blue-600"/> Pengaturan Profil</h2><div className="space-y-5"><div><Label>Email</Label><Input value={form.email} disabled className="bg-slate-100 text-slate-500 font-mono"/></div><div><Label>Nama Lengkap</Label><Input value={form.name} onChange={(e:any) => setForm({...form, name: e.target.value})} /></div><div><Label>Nama Bisnis</Label><Input value={form.businessName} onChange={(e:any) => setForm({...form, businessName: e.target.value})} /></div><div className="flex gap-3 pt-4"><Button variant="outline" className="w-full h-11" onClick={onClose}>Batal</Button><Button className="w-full h-11" onClick={() => onSave(form)}>Simpan Perubahan</Button></div></div></div></div>
+   )
+}
+
+function FraudDetailModal({ alert, onClose }: { alert: FraudItem, onClose: () => void }) {
+  if (!alert) return null;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"><div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"><div className={`p-6 ${alert.risk === 'High' ? 'bg-red-50' : 'bg-amber-50'} border-b`}><div className="flex items-center gap-3 mb-2"><ShieldAlert className={`h-8 w-8 ${alert.risk === 'High' ? 'text-red-600' : 'text-amber-600'}`} /><h2 className="text-xl font-bold text-slate-800">Analisis Risiko AI</h2></div><p className="text-sm text-slate-600">Laporan Deteksi Anomali Keuangan</p></div><div className="p-6 space-y-4"><div><Label>Status Risiko</Label><Badge variant={alert.risk === 'High' ? 'destructive' : 'warning'} className="text-sm px-3 py-1">{alert.risk} Risk</Badge></div><div className="bg-slate-50 p-4 rounded-lg border border-slate-100"><h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><Sparkles className="h-4 w-4 text-blue-500"/> Pesan Sistem:</h4><p className="text-sm text-slate-600 leading-relaxed font-medium">{alert.msg}</p></div></div><div className="p-4 bg-slate-50 border-t flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Tutup</Button><Button variant="primary" onClick={() => { alert.msg = "Laporan dikirim"; onClose(); }}>Eskalasi ke Manajemen</Button></div></div></div>
+  );
+}
+
+// --- HEADER ---
+function Header({ profile, onLogout, notifications, onReadNotif, onEditProfile }: any) {
+  const [showNotif, setShowNotif] = useState(false);
+  const unreadCount = notifications.filter((n:any) => !n.read).length;
+
+  return (
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="bg-gradient-to-br from-indigo-600 to-blue-500 p-2.5 rounded-xl text-white shadow-blue-200 shadow-lg transform rotate-3 hover:rotate-0 transition-all duration-300">
+           <ChefHat className="h-6 w-6" />
+        </div>
+        <div>
+           <h1 className="font-serif font-bold text-2xl tracking-tight text-slate-800 leading-none">QIAN AI</h1>
+           <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Warung Makan Mbah Marto</p>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" className="hidden md:flex text-slate-500" onClick={() => window.open(`mailto:${ADMIN_EMAIL}`)}>
+           <HelpCircle className="h-4 w-4 mr-2" /> Support
+        </Button>
+        <div className="relative">
+          <Button variant="ghost" size="icon" onClick={() => { setShowNotif(!showNotif); if(!showNotif && unreadCount>0) onReadNotif(); }} className="relative text-slate-500 hover:bg-slate-100 rounded-full">
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && <span className="absolute top-2 right-2 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"/>}
+          </Button>
+          {showNotif && (
+            <div className="absolute right-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 p-0 z-50 animate-in zoom-in-95 overflow-hidden">
+              <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
+                 <span className="font-bold text-sm text-slate-700">Notifikasi</span>
+                 <span className="text-xs text-blue-600 cursor-pointer hover:underline" onClick={onReadNotif}>Mark read</span>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {notifications.length === 0 ? <div className="p-8 text-center text-slate-400 text-xs">Tidak ada notifikasi baru</div> : 
+                  notifications.map((n:any) => (
+                    <div key={n.id} className={`p-4 border-b last:border-0 hover:bg-slate-50 transition-colors ${!n.read ? 'bg-blue-50/40' : ''}`}>
+                      <div className="flex justify-between items-start mb-1">
+                        <strong className="text-sm text-slate-800">{n.title}</strong>
+                        <span className="text-[10px] text-slate-400">{n.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">{n.message}</p>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="relative group pl-4 border-l border-slate-200">
+           <div className="flex items-center gap-3 cursor-pointer">
+              <div className="text-right hidden md:block">
+                 <p className="text-sm font-bold text-slate-800 leading-none">{profile?.name}</p>
+                 <p className="text-xs text-slate-500 mt-0.5">{profile?.businessName}</p>
+              </div>
+              <div className="h-10 w-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold shadow-md hover:scale-105 transition-transform">
+                {profile?.name?.charAt(0) || 'U'}
+              </div>
+           </div>
+           <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-slate-100 p-1 z-50 hidden group-hover:block animate-in zoom-in-95">
+             <div className="md:hidden px-4 py-3 border-b border-slate-50">
+               <p className="font-bold text-slate-800">{profile?.name}</p>
+               <p className="text-xs text-slate-500">{profile?.businessName}</p>
+             </div>
+             <button onClick={onEditProfile} className="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-3 transition-colors">
+               <UserCog className="h-4 w-4" /> Pengaturan Profil
+             </button>
+             <div className="h-px bg-slate-100 my-1"></div>
+             <button onClick={onLogout} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-3 transition-colors">
+               <LogOut className="h-4 w-4" /> Keluar Aplikasi
+             </button>
+           </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// --- MAIN APP ---
+export default function App() {
+   const [user, setUser] = useState<UserProfile | null>(null);
+   const [showSetup, setShowSetup] = useState(false);
+   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+   const [filter, setFilter] = useState('MTD');
+   const [selectedFraudAlert, setSelectedFraudAlert] = useState<FraudItem | null>(null);
+   
+   const { data, loading, error, refetch } = useData(filter);
+
+   const addNotification = (type: any, title: string, message: string) => {
+      setNotifications(prev => [{ id: Date.now().toString(), type, title, message, timestamp: new Date(), read: false }, ...prev]);
+   };
+
+   const handleLogin = (email: string) => {
+      const saved = localStorage.getItem('qian_profile');
+      if(saved) setUser(JSON.parse(saved));
+      else { setUser({ email, name: 'Elang Rimbawan', businessName: 'Warung Makan Mbah Marto', businessType: '', outletsCount: 1, phoneNumber: '', address: '' } as UserProfile); setShowSetup(true); }
+      addNotification('success', 'Login Berhasil', 'Selamat datang Mas Elang.');
+   };
+
+   if (!user) return <LoginPage onLogin={handleLogin} />;
+
+   return (
+      <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
+         <Header profile={user} onLogout={() => window.location.reload()} notifications={notifications} onReadNotif={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} onEditProfile={() => setShowSetup(true)} />
+
+         <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+               <div>
+                  <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Executive Dashboard</h2>
+                  <p className="text-slate-500 mt-1">Pantauan Bisnis Mas Elang & Tim.</p>
+               </div>
+               <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Calendar className="h-4 w-4 text-slate-400" /></div>
+                  <select value={filter} onChange={(e) => setFilter(e.target.value)} className="appearance-none bg-white border border-slate-200 text-slate-700 py-2.5 pl-10 pr-10 rounded-xl font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer hover:border-blue-300 transition-all">
+                     <option value="MTD">Bulan Ini (MTD)</option>
+                     <option value="Last Month">Bulan Lalu</option>
+                     <option value="YTD">Tahun Ini (YTD)</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"><ChevronDown className="h-4 w-4 text-slate-400" /></div>
+               </div>
+            </div>
+
+            {loading && !data && (<div className="h-96 flex flex-col items-center justify-center text-slate-400 gap-3"><RefreshCw className="h-10 w-10 animate-spin text-indigo-500"/><p className="font-medium animate-pulse">Menyiapkan Data Warung Mbah Marto...</p></div>)}
+
+            {data && (
+               <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                  {data.fraud_alerts.some(a => a.risk !== 'Safe') && (<div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-start gap-4 shadow-sm"><ShieldAlert className="h-6 w-6 text-red-600 mt-1 animate-pulse" /><div className="flex-1"><h3 className="font-bold text-red-800">Peringatan Keamanan Terdeteksi</h3><p className="text-sm text-red-700 mt-1">Sistem AI menemukan anomali transaksi.</p></div><Button variant="destructive" size="sm" onClick={() => setSelectedFraudAlert(data.fraud_alerts.find(a => a.risk !== 'Safe')!)}>Periksa</Button></div>)}
+
+                  <FinancialSection data={data} />
+                  <div key={filter}><SalesPotentialSection data={data} /></div>
+                  <div key={`bills-${filter}`}><BillTrackerSection data={data} /></div>
+                  <RecommendationCenter data={data} />
+                  
+                  {/* AI COMMAND CENTER (Moved to Bottom) */}
+                  <AiCommandCenter data={data} />
+               </div>
+            )}
+         </main>
+
+         <ChatAssistant data={data} />
+         {showSetup && <ProfileSetupModal initialData={user} onSave={(d:any)=>{setUser({...user,...d}); setShowSetup(false);}} onClose={()=>setShowSetup(false)} />}
+         {selectedFraudAlert && <FraudDetailModal alert={selectedFraudAlert} onClose={() => setSelectedFraudAlert(null)} />}
+      </div>
+   );
+}
