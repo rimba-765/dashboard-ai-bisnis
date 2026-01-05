@@ -1,774 +1,804 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  LayoutDashboard, TrendingUp, Wallet, UtensilsCrossed, Megaphone, 
-  ShieldAlert, MessageSquare, X, Bell, RefreshCw, 
-  ArrowUpRight, ArrowDownRight, Wifi, WifiOff, 
-  AlertTriangle, Info, LogIn, Sparkles, LogOut, 
-  Menu as MenuIcon, UserCog, Mail, ShoppingBag, Calendar,
-  Settings, Shield, CheckCircle, Trash2, ChevronRight, HelpCircle,
-  Target, BarChart3, ChevronDown, ChevronUp, PieChart as PieIcon,
-  Store, Truck, Banknote, CreditCard, Users, Search, Filter,
-  ChefHat, Percent, Activity, Lightbulb, Receipt, CalendarCheck, FileText,
-  DollarSign, Brain, Zap, AlertOctagon, TrendingDown, MousePointerClick,
-  Calculator, Coins, BarChart4, MapPin, Building2, Loader2
-} from 'lucide-react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, Legend, PieChart, Pie, Cell, AreaChart, Area, ComposedChart
-} from 'recharts';
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qian AI - Warung Mbah Marto</title>
+    
+    <!-- STYLE: TAILWIND CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- ENGINE: BABEL -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-// --- KONFIGURASI ---
-// Ganti URL ini nanti dengan URL Google Apps Script Anda sendiri saat sudah di-deploy
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDKDRq6fQ8Lwgj-gZLhM_4iiJTaxFZKriY1ZZ4oC6kMjqy8QjKI8qX3Zc6EtaiDm8A/exec';
-const ADMIN_EMAIL = "elangrimbawan123@gmail.com";
-
-// --- TIPE DATA ---
-interface FinancialData {
-  Pendapatan: number;
-  Pengeluaran: number;
-  Laba_Rugi: number;
-  Saldo_Kas: number;
-  Kas_Masuk?: number; 
-  Kas_Keluar?: number; 
-}
-
-interface SalesChannels {
-  ShopeeFood: number;
-  GoFood: number;
-  GrabFood: number;
-  Offline_Cash: number;
-  QRIS: number;
-}
-
-interface ExpenseCategories {
-  Bahan_Baku: number;
-  Operasional: number;
-  Gaji_Tetap: number;
-  Lain_Lain: number;
-}
-
-interface SalesPotentialData {
-  target_revenue: number;
-  actual_revenue: number;
-  achievement_percentage: string;
-  gap_value: number;
-  forecast_eom: number;
-}
-
-interface ProductItem {
-  name: string;
-  qty: number;
-  sales: number;
-}
-
-interface SalesDataPoint {
-  month: string;
-  actual: number;
-  predicted: number;
-}
-
-interface SalesPrediction {
-  chart_data: SalesDataPoint[];
-}
-
-interface BillItem {
-  nama_tagihan: string;
-  target_tagihan: number; 
-  nominal_terbayar: number;
-  sisa_tagihan: number;
-  status: string;
-}
-
-interface FraudItem {
-  id: number;
-  risk: string;
-  msg: string;
-}
-
-interface AppData {
-  status: string;
-  filter_applied: string;
-  period?: { start: string, end: string };
-  financials: FinancialData;
-  sales_channels: SalesChannels;
-  expense_categories: ExpenseCategories;
-  sales_potential: SalesPotentialData;
-  fixed_costs_detail?: BillItem[];
-  total_unpaid_bills?: number;
-  best_sellers: ProductItem[];
-  least_sellers: ProductItem[];
-  sales_prediction: SalesPrediction;
-  fraud_alerts: FraudItem[];
-  ai_insight: string;
-}
-
-interface UserProfile {
-  name: string;
-  email: string;
-  businessName: string;
-}
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  timestamp: Date;
-}
-
-interface AppNotification {
-  id: string;
-  type: 'security' | 'info' | 'success' | 'warning';
-  title: string;
-  message: string;
-  timestamp: Date;
-  read: boolean;
-}
-
-// Interface AI Engine
-interface BusinessHealth {
-  status: 'AMAN' | 'WASPADA' | 'BAHAYA';
-  highlight: string;
-  actions: string[];
-  trend: string;
-  themeColor: string;
-  icon: any;
-  profitMargin: number;
-  bepValue: number;
-  dailyTarget: number;
-  dailyBudget: number;
-  topChannel: string;
-  adBudget: number;
-}
-
-// --- UTILS ---
-const formatCurrency = (val: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
-
-const getMockData = (): AppData => ({
-  status: "success",
-  filter_applied: "MTD",
-  period: { start: "01 Jan 2026", end: "31 Jan 2026" },
-  financials: { Pendapatan: 0, Pengeluaran: 0, Laba_Rugi: 0, Saldo_Kas: 0, Kas_Masuk: 0, Kas_Keluar: 0 },
-  sales_channels: { ShopeeFood: 0, GoFood: 0, GrabFood: 0, Offline_Cash: 0, QRIS: 0 },
-  expense_categories: { Bahan_Baku: 0, Operasional: 0, Gaji_Tetap: 0, Lain_Lain: 0 },
-  sales_potential: { target_revenue: 0, actual_revenue: 0, achievement_percentage: "0.0", gap_value: 0, forecast_eom: 0 },
-  fixed_costs_detail: [],
-  total_unpaid_bills: 0,
-  best_sellers: [],
-  least_sellers: [],
-  sales_prediction: { chart_data: [] },
-  fraud_alerts: [{ id: 0, risk: 'Safe', msg: 'Aman' }],
-  ai_insight: "Belum ada analisis."
-});
-
-// --- CULINARY PRO INTELLIGENCE ENGINE LOGIC ---
-const analyzeBusinessHealth = (data: AppData): BusinessHealth => {
-  const saldoKas = data.financials.Saldo_Kas || 0;
-  const unpaidBills = data.total_unpaid_bills || 0;
-  const cashGap = saldoKas - unpaidBills;
-  const revenue = data.financials.Pendapatan || 1; 
-  const expenses = data.financials.Pengeluaran || 0;
-  const profit = data.financials.Laba_Rugi || 0;
-  
-  const target = data.sales_potential.target_revenue;
-  const actual = data.sales_potential.actual_revenue;
-  const forecast = data.sales_potential.forecast_eom || target;
-  const remainingTarget = Math.max(0, target - actual);
-  
-  // Logic Tanggal
-  const today = new Date();
-  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-  const remainingDays = Math.max(1, lastDay.getDate() - today.getDate());
-
-  // 1. BEP Calculation
-  const fixedCost = data.expense_categories.Gaji_Tetap + (unpaidBills > 0 ? unpaidBills : 0);
-  const variableCost = data.expense_categories.Bahan_Baku + data.expense_categories.Operasional;
-  const variableRatio = revenue > 0 ? variableCost / revenue : 0;
-  const contributionMarginRatio = 1 - variableRatio;
-  const bepValue = contributionMarginRatio > 0 ? fixedCost / contributionMarginRatio : 0;
-
-  // 2. Metrics Calculation (UPDATED DAILY BUDGET LOGIC)
-  const profitMargin = (profit / revenue) * 100;
-  const dailyTarget = remainingTarget / remainingDays;
-  const maxMonthlyBudget = forecast * 0.80; 
-  const remainingBudget = Math.max(0, maxMonthlyBudget - expenses);
-  const dailyBudget = remainingBudget / remainingDays;
-
-  // 3. Marketing
-  const channels = Object.entries(data.sales_channels).sort(([,a], [,b]) => b - a);
-  const topChannel = channels[0][0]; 
-  const adBudget = revenue * 0.05; 
-
-  // 4. Status Determination
-  let status: 'AMAN' | 'WASPADA' | 'BAHAYA' = 'AMAN';
-  let highlight = "Bisnis Stabil.";
-  let trend = "Persaingan Maguwoharjo Normal.";
-  let themeColor = "bg-emerald-600";
-  let Icon = CheckCircle;
-  let actions = [];
-
-  const offlineSales = data.sales_channels.Offline_Cash + data.sales_channels.QRIS;
-  const onlineSales = data.sales_channels.ShopeeFood + data.sales_channels.GoFood + data.sales_channels.GrabFood;
-
-  if (cashGap < 0) {
-    status = 'BAHAYA';
-    highlight = `Mas Elang, Alert Cashflow! Defisit ${formatCurrency(Math.abs(cashGap))}.`;
-    actions = ["STOP BELANJA stok non-urgent.", "Push broadcast WA pelanggan.", "Nego tempo supplier."];
-    themeColor = "bg-rose-600";
-    Icon = AlertOctagon;
-  } else if (offlineSales < (onlineSales * 0.3)) {
-    status = 'WASPADA';
-    highlight = "Offline Terlalu Sepi.";
-    actions = ["Pasang Banner Paket Mahasiswa.", "Cek harga kompetitor.", "Promo Dine-in."];
-    themeColor = "bg-amber-500";
-    Icon = Building2;
-  } else if (profitMargin < 15) {
-     status = 'WASPADA';
-     highlight = "Margin Tipis.";
-     actions = ["Audit dapur (Food Waste).", "Kurangi porsi sedikit.", "Naikkan harga minuman."];
-     themeColor = "bg-orange-500";
-     Icon = TrendingDown;
-  } else {
-    status = 'AMAN';
-    highlight = `Performa Mantap! Surplus ${formatCurrency(cashGap)}.`;
-    actions = ["Sisihkan laba perbaikan interior.", "Iklan GrabFood weekend.", "Review bonus staff."];
-    themeColor = "bg-emerald-600";
-    Icon = TrendingUp;
-  }
-
-  return { status, highlight, actions, trend, themeColor, icon: Icon, profitMargin, bepValue, dailyTarget, dailyBudget, topChannel, adBudget };
-};
-
-// --- HOOKS ---
-function useData(filter: string) {
-  const [data, setData] = useState<AppData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const url = `${APPS_SCRIPT_URL}?filter=${encodeURIComponent(filter)}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Gagal mengambil data');
-      const json = await res.json();
-      setData(json);
-    } catch (err: any) {
-      console.error(err);
-      setError(err);
-      setData(getMockData()); 
-    } finally {
-      setLoading(false);
+    <!-- CONFIG: IMPORT MAP -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom": "https://esm.sh/react-dom@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "recharts": "https://esm.sh/recharts@2.12.0?external=react,react-dom",
+            "lucide-react": "https://esm.sh/lucide-react@0.330.0?external=react"
+        }
     }
-  };
-
-  useEffect(() => { fetchData(); }, [filter]);
-  return { data, loading, error, refetch: fetchData };
-}
-
-// --- UI COMPONENTS ---
-const Card = ({ children, className = '', onClick }: { children: React.ReactNode; className?: string, onClick?: () => void }) => (
-  <div onClick={onClick} className={`bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''} ${className}`}>{children}</div>
-);
-const Badge = ({ children, variant = 'default', className = '' }: any) => {
-  const variants: any = { default: "bg-blue-100 text-blue-700", success: "bg-emerald-100 text-emerald-700", warning: "bg-amber-100 text-amber-700", destructive: "bg-rose-100 text-rose-700", outline: "border border-slate-200 text-slate-600" };
-  return <div className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${variants[variant]} ${className}`}>{children}</div>;
-};
-const Button = ({ children, variant = 'primary', size = 'md', className = '', disabled, onClick, ...props }: any) => {
-  const variants: any = { primary: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm", outline: "border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-900", ghost: "hover:bg-slate-100 hover:text-slate-900", destructive: "bg-red-500 text-white hover:bg-red-600", success: "bg-emerald-600 text-white hover:bg-emerald-700" };
-  const sizes: any = { sm: "h-8 px-3 text-xs", md: "h-10 px-4 py-2", lg: "h-11 px-8", icon: "h-10 w-10 p-2" };
-  return (
-    <button className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none disabled:opacity-50 disabled:pointer-events-none active:scale-95 ${variants[variant]} ${sizes[size]} ${className}`} disabled={disabled} onClick={onClick} {...props}>{children}</button>
-  );
-};
-const Input = (props: any) => <input {...props} className={`flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${props.className}`} />;
-const Label = ({ children }: any) => <label className="text-sm font-medium mb-2 block text-slate-700">{children}</label>;
-
-// --- SECTIONS ---
-function FinancialSection({ data }: { data: AppData }) {
-  const [expanded, setExpanded] = useState<'revenue' | 'expense' | 'cash' | null>(null);
-  const revenueTotal = Object.values(data.sales_channels).reduce((a, b) => a + b, 0);
-  const expenseTotal = Object.values(data.expense_categories).reduce((a, b) => a + b, 0);
-
-  const coreMetrics = [
-    { id: 'revenue', label: 'Total Pendapatan', value: data.financials.Pendapatan, icon: Wallet, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', breakdown: { ...data.sales_channels, Total: revenueTotal } },
-    { id: 'expense', label: 'Total Pengeluaran', value: data.financials.Pengeluaran, icon: ArrowUpRight, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-100', breakdown: { ...data.expense_categories, Total: expenseTotal } },
-    { id: 'profit', label: 'Laba Rugi Bersih', value: data.financials.Laba_Rugi, icon: TrendingUp, color: data.financials.Laba_Rugi >= 0 ? 'text-emerald-600' : 'text-red-600', bg: data.financials.Laba_Rugi >= 0 ? 'bg-emerald-50' : 'bg-red-50', border: data.financials.Laba_Rugi >= 0 ? 'border-emerald-100' : 'border-red-100' },
-  ];
-
-  const renderBreakdown = (metricId: string, breakdownData: any) => {
-    let items = [];
-    if (metricId === 'revenue') {
-       items = [{ label: 'ShopeeFood', val: breakdownData.ShopeeFood, col: '#EE4D2D' }, { label: 'GoFood', val: breakdownData.GoFood, col: '#00AA13' }, { label: 'GrabFood', val: breakdownData.GrabFood, col: '#00B14F' }, { label: 'Offline Cash', val: breakdownData.Offline_Cash, col: '#3B82F6' }, { label: 'QRIS', val: breakdownData.QRIS, col: '#F97316' }].sort((a,b) => b.val - a.val);
-    } else if (metricId === 'expense') {
-       items = [{ label: 'Bahan Baku', val: breakdownData.Bahan_Baku, col: '#EF4444' }, { label: 'Operasional', val: breakdownData.Operasional, col: '#F59E0B' }, { label: 'Biaya Tetap', val: breakdownData.Gaji_Tetap, col: '#10B981' }, { label: 'Lainnya', val: breakdownData.Lain_Lain, col: '#6366F1' }].sort((a,b) => b.val - a.val);
-    } else if (metricId === 'cash') {
-       items = [{ label: 'Total Kas Masuk', val: data.financials.Kas_Masuk || 0, col: '#10B981' }, { label: 'Total Kas Keluar', val: data.financials.Kas_Keluar || 0, col: '#EF4444' }];
-    }
-    return (
-      <div className="mt-4 pt-4 border-t border-slate-100 animate-in slide-in-from-top-2">
-         <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Breakdown {metricId === 'cash' ? 'Arus Kas' : 'Kategori'}</p>
-         <div className="space-y-2">{items.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-sm"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{backgroundColor: item.col}}></div><span className="text-slate-600">{item.label}</span></div><div className="flex items-center gap-3"><span className="font-bold text-slate-700">{formatCurrency(item.val)}</span>{metricId !== 'cash' && (<span className="text-xs text-slate-400 w-8 text-right">{breakdownData.Total > 0 ? ((item.val / breakdownData.Total) * 100).toFixed(0) + '%' : '0%'}</span>)}</div></div>))}</div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="space-y-6">
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{coreMetrics.map((m) => (<div key={m.id} className={`bg-white rounded-3xl p-6 shadow-sm border ${m.border} transition-all duration-300 ${expanded === m.id ? 'ring-2 ring-blue-100 scale-[1.01]' : 'hover:shadow-md'}`} onClick={() => m.id !== 'profit' && setExpanded(expanded === m.id ? null : m.id as any)}><div className="flex items-start justify-between cursor-pointer"><div><p className="text-sm font-medium text-slate-500">{m.label}</p><h3 className={`text-2xl lg:text-3xl font-bold mt-1 ${m.color}`}>{formatCurrency(m.value)}</h3></div><div className={`p-3 rounded-2xl ${m.bg}`}><m.icon className={`h-6 w-6 ${m.color}`} /></div></div>{(m.id === 'revenue' || m.id === 'expense') && (<div className="mt-2 text-xs text-slate-400 flex items-center gap-1">{expanded === m.id ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>}{expanded === m.id ? 'Tutup Detail' : 'Klik untuk detail kategori'}</div>)}{expanded === m.id && m.breakdown && renderBreakdown(m.id, m.breakdown)}</div>))}</div>
-       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className={`bg-white rounded-2xl p-4 border border-indigo-100 shadow-sm transition-all duration-300 cursor-pointer ${expanded === 'cash' ? 'ring-2 ring-indigo-100' : 'hover:shadow-md'}`} onClick={() => setExpanded(expanded === 'cash' ? null : 'cash')}><div className="flex items-center gap-4"><div className="p-2 rounded-xl bg-indigo-50"><Banknote className="h-5 w-5 text-indigo-600" /></div><div className="flex-1"><p className="text-xs text-slate-500 font-medium">Saldo Kas Akhir</p><p className="text-lg font-bold text-indigo-600">{formatCurrency(data.financials.Saldo_Kas)}</p></div><div className="text-slate-400">{expanded === 'cash' ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}</div></div>{expanded === 'cash' && renderBreakdown('cash', {})}</div>
-          <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-200 flex items-center gap-4"><div className="p-2 rounded-xl bg-amber-50"><AlertTriangle className="h-5 w-5 text-amber-600" /></div><div><p className="text-xs text-slate-500 font-medium">Unpaid Bills (Total Hutang)</p><p className={`text-lg font-bold ${data.total_unpaid_bills && data.total_unpaid_bills > 0 ? 'text-rose-600' : 'text-slate-600'}`}>{formatCurrency(data.total_unpaid_bills || 0)}</p></div></div>
-       </div>
-    </div>
-  );
-}
-
-function SalesPotentialSection({ data }: { data: AppData }) {
-   const [showForecast, setShowForecast] = useState(true); 
-   const actual = data.sales_potential.actual_revenue;
-   const userTarget = data.sales_potential.target_revenue;
-   const chartData = data.sales_prediction?.chart_data || [];
-   const percentAchieved = userTarget > 0 ? ((actual / userTarget) * 100).toFixed(1) : "0";
-   
-   const lastData = chartData.length > 0 ? chartData[chartData.length - 1] : null;
-   const trendText = lastData && lastData.predicted > lastData.actual 
-      ? "Tren menunjukkan potensi kenaikan di akhir bulan. Maksimalkan promo gajian." 
-      : "Tren cenderung stagnan. Perlu strategi impulsif (diskon kilat).";
-
-   return (
-      <div className="space-y-6">
-         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><div><h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Target className="h-6 w-6 text-indigo-600"/> Sales Potential Analysis</h3><p className="text-xs text-slate-500 mt-1">Lacak pencapaian target dan prediksi pendapatan (Data Bulanan).</p></div></div>
-         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="col-span-1 lg:col-span-1 p-6 flex flex-col justify-between relative bg-gradient-to-br from-white to-indigo-50/50">
-               <div>
-                  <div className="flex justify-between items-start mb-4"><div><p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Target Revenue</p><h2 className="text-2xl font-bold text-slate-800 mt-1">{formatCurrency(userTarget)}</h2></div><div className="p-2 bg-indigo-100 rounded-lg"><GoalFlag className="h-5 w-5 text-indigo-600"/></div></div>
-                  <div className="h-40 w-full relative my-4"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{value: actual, color:'#4f46e5'}, {value: Math.max(0, userTarget-actual), color:'#e2e8f0'}]} cx="50%" cy="50%" innerRadius={50} outerRadius={65} startAngle={90} endAngle={-270} dataKey="value" stroke="none">{[{color:'#4f46e5'}, {color:'#e2e8f0'}].map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie></PieChart></ResponsiveContainer><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-3xl font-extrabold text-indigo-600">{percentAchieved}%</span></div></div>
-               </div>
-               <div className="space-y-3"><div className="flex justify-between text-sm"><span className="text-slate-500">Tercapai</span><span className="font-bold text-indigo-600">{formatCurrency(actual)}</span></div><div className="flex justify-between text-sm"><span className="text-slate-500">Kekurangan (Gap)</span><span className="font-bold text-rose-500">{formatCurrency(Math.max(0, userTarget - actual))}</span></div><Button variant="outline" size="sm" className="w-full mt-2" onClick={() => setShowForecast(!showForecast)}>{showForecast ? 'Sembunyikan Grafik' : 'Tampilkan Grafik & Analisis'}</Button></div>
-            </Card>
-            <div className={`col-span-1 lg:col-span-2 transition-all duration-500 ease-in-out ${showForecast ? 'opacity-100' : 'opacity-100 lg:col-span-2'}`}>
-               {showForecast ? (
-                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-full flex flex-col">
-                     <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"><div><h4 className="font-bold text-slate-800 flex items-center gap-2"><Sparkles className="h-4 w-4 text-purple-500"/> AI Forecast Bulanan</h4><p className="text-xs text-slate-500 mt-1">Estimasi pendapatan hingga akhir periode.</p></div><div className="text-right"><p className="text-xs text-slate-400">Prediksi Akhir Bulan</p><p className="text-xl font-bold text-purple-600">{formatCurrency(data.sales_potential.forecast_eom)}</p></div></div>
-                     <div className="flex-1 p-6 min-h-[300px]"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={chartData} margin={{top:10, right:10, left:-20, bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize:12}} /><YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `${v/1000000}M`} tick={{fontSize:12}} /><Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 25px -5px rgba(0, 0, 0, 0.1)'}} formatter={(value:number) => formatCurrency(value)} /><Bar dataKey="actual" name="Aktual" fill="#cbd5e1" barSize={30} radius={[4,4,0,0]} /><Line type="monotone" dataKey="predicted" name="Prediksi AI" stroke="#8b5cf6" strokeWidth={3} dot={{r: 4, fill:'#8b5cf6'}} activeDot={{r: 6}} /></ComposedChart></ResponsiveContainer></div>
-                     <div className="px-6 py-4 bg-purple-50 border-t border-purple-100"><p className="text-xs text-purple-800 font-medium flex items-start gap-2"><TrendingUp className="h-4 w-4 shrink-0 mt-0.5"/><strong>Analisis Grafik:</strong> {trendText}</p></div>
-                  </div>
-               ) : (
-                  <div className="h-full bg-gradient-to-r from-violet-600 to-indigo-600 rounded-3xl p-8 text-white flex flex-col justify-center items-start shadow-lg relative overflow-hidden">
-                     <div className="absolute right-0 top-0 opacity-10"><BarChart4 className="h-48 w-48 -mr-10 -mt-10"/></div>
-                     <div className="relative z-10 w-full"><div className="flex items-center gap-2 mb-4"><Badge className="bg-white/20 text-white border-0 backdrop-blur-md">AI Summary</Badge><span className="text-xs text-indigo-100">Grafik disembunyikan</span></div><div className="grid grid-cols-2 gap-8 mb-6"><div><p className="text-indigo-200 text-sm mb-1">Forecast Akhir Bulan</p><h2 className="text-4xl font-bold tracking-tight">{formatCurrency(data.sales_potential.forecast_eom)}</h2></div><div><p className="text-indigo-200 text-sm mb-1">Status Target</p><div className="text-2xl font-bold flex items-center gap-2">{percentAchieved}% <span className="text-sm font-normal text-indigo-200">Tercapai</span></div></div></div><div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10"><p className="text-sm leading-relaxed font-medium">"{data.ai_insight}"</p></div></div>
-                  </div>
-               )}
-            </div>
-         </div>
-      </div>
-   );
-}
-const GoalFlag = ({className}:any) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-8a2 2 0 012-2h14a2 2 0 012 2v8M3 21a2 2 0 002 2h14a2 2 0 002-2m-2 0h2m-2-2v-8m0 0V5a2 2 0 012-2h-6a2 2 0 01-2 2H5a2 2 0 01-2-2v6a2 2 0 012 2h2v4h10v-4" /></svg>;
-
-function BillTrackerSection({ data }: { data: AppData }) {
-   const bills = data.fixed_costs_detail || [];
-   const totalUnpaid = data.total_unpaid_bills || 0;
-   
-   return (
-     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4"><h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Receipt className="h-6 w-6 text-rose-600"/> Monthly Fixed Obligations</h3>{totalUnpaid > 0 ? (<div className="bg-rose-100 text-rose-700 px-4 py-2 rounded-xl border border-rose-200 shadow-sm animate-pulse"><span className="text-xs font-bold uppercase tracking-wide mr-2">Total Hutang</span><span className="text-lg font-extrabold">{formatCurrency(totalUnpaid)}</span></div>) : (<Badge variant="success" className="px-3 py-1 bg-emerald-100 text-emerald-700">Semua Lunas 🎉</Badge>)}</div>
-        <Card className="p-0 border-rose-100"><div className="bg-rose-50/50 p-4 border-b border-rose-100 flex items-center gap-2"><Info className="h-4 w-4 text-rose-500"/><p className="text-xs text-rose-700">Daftar tagihan ini tercatat otomatis dalam kategori <strong>Biaya Tetap</strong>.</p></div><div className="divide-y divide-slate-50">{bills.length === 0 ? (<div className="p-8 text-center text-slate-400">Tidak ada tagihan bulan ini.</div>) : (bills.map((bill, idx) => { const progress = bill.target_tagihan > 0 ? (bill.nominal_terbayar / bill.target_tagihan) * 100 : 0; const isPaid = bill.sisa_tagihan <= 0; return (<div key={idx} className="p-4 md:p-6 hover:bg-slate-50 transition-colors"><div className="flex justify-between items-start mb-2"><div><h4 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="h-4 w-4 text-slate-500"/> {bill.nama_tagihan}</h4><div className="text-xs text-slate-500 mt-1">Target: <span className="font-medium text-slate-700">{formatCurrency(bill.target_tagihan)}</span></div></div><div className="text-right"><Badge variant={isPaid ? 'success' : 'destructive'} className="mb-1">{isPaid ? 'LUNAS' : 'BELUM LUNAS'}</Badge><div className="text-xs text-slate-400 font-medium">{isPaid ? 'Selesai' : `Sisa: ${formatCurrency(bill.sisa_tagihan)}`}</div></div></div><div className="relative pt-2"><div className="flex justify-between text-[10px] font-semibold text-slate-500 mb-1.5 uppercase tracking-wide"><span>Terbayar: {formatCurrency(bill.nominal_terbayar)}</span><span>{progress.toFixed(0)}%</span></div><div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner"><div className={`h-full rounded-full transition-all duration-1000 ease-out relative ${isPaid ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-gradient-to-r from-rose-400 to-rose-600'}`} style={{ width: `${progress}%` }}><div className="absolute top-0 right-0 bottom-0 w-1 bg-white/30 skew-x-12 transform translate-x-1"></div></div></div></div></div>) }))}</div></Card>
-     </div>
-   )
-}
-
-function RecommendationCenter({ data }: { data: AppData }) {
-   const [activeTab, setActiveTab] = useState<'pairing' | 'promo' | 'fraud'>('pairing');
-   const bestSeller = (data.best_sellers && data.best_sellers.length > 0) ? data.best_sellers[0] : { name: 'Belum ada data', sales: 0, qty: 0 };
-   
-   return (
-      <div className="space-y-4">
-         <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Lightbulb className="h-6 w-6 text-yellow-500"/> Recommendation Center</h3>
-         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="flex border-b border-slate-100"><button onClick={() => setActiveTab('pairing')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'pairing' ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-50'}`}><UtensilsCrossed className="h-4 w-4"/> Menu Strategy</button><button onClick={() => setActiveTab('promo')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'promo' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><Megaphone className="h-4 w-4"/> Smart Promotion</button><button onClick={() => setActiveTab('fraud')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'fraud' ? 'bg-rose-50 text-rose-600 border-b-2 border-rose-600' : 'text-slate-500 hover:bg-slate-50'}`}><ShieldAlert className="h-4 w-4"/> Fraud & Health</button></div>
-            <div className="p-6 min-h-[300px]">
-               {activeTab === 'pairing' && (
-                  <div className="animate-in fade-in grid grid-cols-1 md:grid-cols-2 gap-8">
-                     <div><h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-emerald-500"/> Analisis Menu Terlaris</h4><div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mb-4"><div className="flex justify-between items-center mb-2"><span className="font-bold text-lg text-emerald-900">{bestSeller.name}</span><Badge variant="success">{bestSeller.qty} Terjual</Badge></div><p className="text-sm text-emerald-700">Kontribusi Sales: {formatCurrency(bestSeller.sales)}</p></div><div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100"><h5 className="font-bold text-indigo-900 text-sm mb-2 flex items-center gap-2"><Sparkles className="h-3 w-3"/> AI Recommendation</h5><p className="text-xs text-indigo-700 leading-relaxed">Menu ini adalah "Hero Product". Pastikan stok bahan baku selalu aman.</p></div></div>
-                     <div><h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><ArrowDownRight className="h-4 w-4 text-rose-500"/> Analisis Menu Kurang Laku</h4>{(data.least_sellers || []).length > 0 ? (<div className="space-y-3">{(data.least_sellers || []).slice(0,3).map((item, i) => (<div key={i} className="flex justify-between items-center p-3 border rounded-lg hover:bg-slate-50"><span className="text-slate-700 font-medium">{item.name}</span><span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">{item.qty} terjual</span></div>))}</div>) : <p className="text-slate-400 italic">Data menu kurang laku belum tersedia.</p>}</div>
-                  </div>
-               )}
-               {activeTab === 'promo' && (
-                  <div className="animate-in fade-in space-y-6"><div className="bg-blue-50 p-6 rounded-2xl"><h4 className="font-bold text-blue-900 mb-2">Target Promosi Efektif</h4><p className="text-sm text-blue-700">AI menyarankan budget maksimal 5% dari omset untuk iklan bulan ini agar ROI tetap positif.</p></div></div>
-               )}
-               {activeTab === 'fraud' && (
-                  <div className="animate-in fade-in"><div className="flex items-center justify-between mb-6"><h4 className="font-bold text-slate-800">Health Check Report</h4></div><div className="bg-slate-50 p-4 rounded-lg text-sm text-slate-600">Sistem keamanan berjalan normal. Tidak ada aktivitas mencurigakan yang signifikan.</div></div>
-               )}
-            </div>
-         </div>
-      </div>
-   );
-}
-
-function AiCommandCenter({ data }: { data: AppData }) {
-  const health = analyzeBusinessHealth(data);
-  const Icon = health.icon;
-  const [activeTab, setActiveTab] = useState<'Profit' | 'Growth' | 'Cash'>('Profit');
-
-  return (
-    <div className="w-full mt-10 mb-20 animate-in slide-in-from-bottom-8 duration-700">
-      <div className="relative overflow-hidden rounded-3xl shadow-2xl border border-slate-200 bg-white">
-        {/* Header - Always Visible */}
-        <div className={`${health.themeColor} px-8 py-6 flex flex-col md:flex-row md:items-center justify-between text-white relative overflow-hidden`}>
-           <div className="absolute top-0 right-0 p-4 opacity-10"><Brain className="h-40 w-40 transform rotate-12"/></div>
-           <div className="relative z-10"><div className="flex items-center gap-3 mb-2"><div className="p-2 bg-white/20 rounded-xl backdrop-blur-md"><Zap className="h-6 w-6 text-white" /></div><span className="font-bold tracking-widest text-xs uppercase opacity-80">CulinaryPro Intelligence Engine (Warung Mbah Marto Edition)</span></div><h2 className="text-3xl font-extrabold leading-tight">{health.highlight}</h2></div>
-           <div className="relative z-10 mt-4 md:mt-0 flex flex-col items-end"><div className="flex items-center gap-2 bg-black/20 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 mb-2"><div className={`w-2.5 h-2.5 rounded-full ${health.status === 'BAHAYA' ? 'animate-ping bg-red-400' : 'bg-emerald-400'}`}></div><span className="text-xs font-bold tracking-wide">STATUS: {health.status}</span></div><p className="text-sm font-medium opacity-90 italic flex items-center gap-2"><TrendingUp className="h-4 w-4"/> {health.trend}</p></div>
-        </div>
-        {/* Dashboard Tabs */}
-        <div className="border-b border-slate-100 bg-slate-50/50 px-8 pt-4">
-           <div className="flex space-x-8">
-              <button onClick={() => setActiveTab('Profit')} className={`pb-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='Profit' ? `border-${health.themeColor.split('-')[1]}-600 text-slate-800` : 'border-transparent text-slate-400 hover:text-slate-600'}`}><PieIcon className="h-4 w-4"/> Profit & BEP</button>
-              <button onClick={() => setActiveTab('Growth')} className={`pb-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='Growth' ? `border-${health.themeColor.split('-')[1]}-600 text-slate-800` : 'border-transparent text-slate-400 hover:text-slate-600'}`}><Megaphone className="h-4 w-4"/> Growth (Offline vs Online)</button>
-              <button onClick={() => setActiveTab('Cash')} className={`pb-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab==='Cash' ? `border-${health.themeColor.split('-')[1]}-600 text-slate-800` : 'border-transparent text-slate-400 hover:text-slate-600'}`}><Calculator className="h-4 w-4"/> Cash Flow & Forecast</button>
-           </div>
-        </div>
-        {/* Content Body */}
-        <div className="p-8 bg-slate-50 min-h-[250px]">
-           {activeTab === 'Profit' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
-                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm"><h4 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-4">Analisis Profitabilitas (Ruko Milik Sendiri)</h4><div className="flex items-end gap-2 mb-2"><h3 className={`text-4xl font-bold ${health.profitMargin > 20 ? 'text-emerald-600' : 'text-amber-500'}`}>{health.profitMargin.toFixed(1)}%</h3><span className="text-sm text-slate-400 mb-1.5">Net Profit Margin</span></div><p className="text-sm text-slate-600 leading-relaxed">{health.profitMargin > 20 ? "Margin sangat sehat karena tidak ada beban sewa Ruko. Keunggulan ini harus dipakai untuk berani perang harga dengan SS/Soto Blangkon jika perlu." : "Margin di bawah standar meskipun tanpa beban sewa. Cek inefisiensi di dapur (Food Waste) atau porsi yang terlalu besar."}</p></div>
-                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm"><h4 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-4">Break Even Point (Titik Impas)</h4><div className="flex items-end gap-2 mb-2"><h3 className="text-4xl font-bold text-indigo-600">{formatCurrency(health.bepValue)}</h3><span className="text-sm text-slate-400 mb-1.5">Revenue Needed</span></div><p className="text-sm text-slate-600 leading-relaxed">Titik aman untuk menutup Gaji Karyawan (2 Orang) + Operasional + Tagihan Rumah. {data.financials.Pendapatan > health.bepValue ? <span className="text-emerald-600 font-bold ml-1"> (SUDAH TERCAPAI ✅)</span> : <span className="text-rose-600 font-bold ml-1"> (BELUM TERCAPAI ⚠️)</span>}</p></div>
-              </div>
-           )}
-           {activeTab === 'Growth' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in">
-                 <div className="bg-white p-5 rounded-2xl border border-slate-100"><h5 className="font-bold text-slate-700 flex items-center gap-2 mb-2"><MousePointerClick className="h-4 w-4 text-blue-500"/> Channel Juara</h5><p className="text-2xl font-bold text-slate-800">{health.topChannel}</p><p className="text-xs text-slate-500 mt-1">Fokuskan 80% budget iklan di sini untuk hasil instan.</p></div>
-                 <div className="bg-white p-5 rounded-2xl border border-slate-100"><h5 className="font-bold text-slate-700 flex items-center gap-2 mb-2"><Coins className="h-4 w-4 text-amber-500"/> Rekomendasi Ad Budget</h5><p className="text-2xl font-bold text-slate-800">{formatCurrency(health.adBudget)}</p><p className="text-xs text-slate-500 mt-1">Alokasi aman (5% revenue) untuk iklan online.</p></div>
-                 <div className="bg-white p-5 rounded-2xl border border-slate-100"><h5 className="font-bold text-slate-700 flex items-center gap-2 mb-2"><Store className="h-4 w-4 text-purple-500"/> Strategi Maguwoharjo</h5><ul className="text-sm text-slate-600 space-y-2"><li>• <strong>Target:</strong> Mahasiswa Sanata Dharma & Karyawan</li><li>• <strong>Masalah:</strong> Offline masih sepi.</li><li>• <strong>Solusi:</strong> Spanduk "Paket Hemat Mahasiswa" di depan ruko. Perbaiki pencahayaan agar terlihat buka.</li></ul></div>
-              </div>
-           )}
-           {activeTab === 'Cash' && (
-              <div className="space-y-6 animate-in fade-in">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-6 rounded-2xl border border-emerald-100"><h4 className="font-bold text-emerald-800 mb-1">Target Harian Wajib</h4><h2 className="text-3xl font-extrabold text-emerald-600">{formatCurrency(health.dailyTarget)}</h2><p className="text-sm text-emerald-700 mt-2">Target harian untuk mencapai revenue bulanan.</p></div>
-                    <div className="bg-gradient-to-br from-rose-50 to-orange-50 p-6 rounded-2xl border border-rose-100"><h4 className="font-bold text-rose-800 mb-1">Batas Pengeluaran Harian</h4><h2 className="text-3xl font-extrabold text-rose-600">{formatCurrency(health.dailyBudget)}</h2><p className="text-sm text-rose-700 mt-2">Batas aman belanja pasar harian agar cashflow aman.</p></div>
-                 </div>
-                 <div className="bg-white p-6 rounded-2xl border border-slate-200"><h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">ACTION PLAN (PRIORITAS TINGGI)</h4><div className="space-y-3">{health.actions.map((action, idx) => (<div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100"><div className={`p-1 rounded-full mt-0.5 ${health.status === 'BAHAYA' ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}><CheckCircle className="h-4 w-4"/></div><span className="text-sm font-medium text-slate-700">{action}</span></div>))}</div></div>
-              </div>
-           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// --- GEMINI INTEGRATION HELPER ---
-async function fetchWithRetry(url: string, options: RequestInit, retries = 5, delay = 1000): Promise<Response> {
-  try {
-    const response = await fetch(url, options);
-    if (!response.ok && retries > 0) {
-       throw new Error(`HTTP ${response.status}`);
-    }
-    return response;
-  } catch (err) {
-    if (retries === 0) throw err;
-    await new Promise(res => setTimeout(res, delay));
-    return fetchWithRetry(url, options, retries - 1, delay * 2);
-  }
-}
-
-const generateGeminiResponse = async (query: string, contextData: AppData | null) => {
-  const apiKey = ""; // Injected at runtime
-  const systemPrompt = `
-    Role: Anda adalah "Qian Manager AI", asisten bisnis digital super cerdas yang didukung oleh Gemini Pro untuk Mas Elang Rimbawan, pemilik "Warung Makan Mbah Marto" (Bisnis Kuliner di Maguwoharjo, Yogyakarta).
+    </script>
     
-    Informasi Pribadi Owner (PENTING - Gunakan jika relevan untuk pendekatan personal):
-    - Nama Owner: Elang Rimbawan
-    - Nama Istri: Octa Nur Hanni Widyaningrum (Mbak Octa)
-    - Nama Anak: Shakeelano Al Qian Aelta (Dek Qian - Inspirasi nama AI ini)
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
+        
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        .animate-in { animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .glass-dark { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .neon-text { text-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+        
+        /* Professional Technical Background Pattern */
+        .bg-tech {
+            background-image: radial-gradient(#e2e8f0 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+        }
 
-    Personality: Cerdas, Data-Driven, Strategis, tapi santai dan suportif seperti partner bisnis. Anda mampu menjawab segala jenis pertanyaan (General Knowledge & Business Specific).
+        /* Animasi Latar Login */
+        .bg-animate { background: linear-gradient(-45deg, #0f172a, #1e293b, #312e81, #1e1b4b); background-size: 400% 400%; animation: gradient 15s ease infinite; }
+        @keyframes gradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+
+        /* Efek Berdenyut untuk Status */
+        .pulse-green { animation: pulseGreen 2s infinite; }
+        @keyframes pulseGreen { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        
+        .pulse-red { animation: pulseRed 2s infinite; }
+        @keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(225, 29, 72, 0); } 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); } }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="text-slate-900 antialiased overflow-x-hidden">
     
-    Context Data Bisnis Saat Ini (Live Real-time):
-    ${JSON.stringify(contextData || "Data tidak tersedia. Jawab berdasarkan pengetahuan umum bisnis kuliner.")}
-    
-    Instructions:
-    1. **Pertanyaan Bisnis:** Jika user bertanya soal bisnis (omset, profit, stok, strategi, kompetitor SS/Soto Blangkon), GUNAKAN DATA DI ATAS untuk menjawab secara spesifik dan tajam. Jangan menebak angka jika ada di data.
-    2. **Pertanyaan Umum:** Jika user bertanya hal umum (resep masakan baru, cuaca, motivasi, coding, sejarah, berita terkini, dll), jawablah dengan kapabilitas penuh Anda sebagai AI canggih (Gemini Pro). Berikan jawaban yang mendalam, kreatif, dan cerdas.
-    3. **Tone:** Selalu panggil user "Mas Elang". Gaya bahasa profesional santai, memotivasi, dan "to the point". Jika situasinya tepat (misal membahas motivasi keluarga), boleh menyinggung Mbak Octa atau Dek Qian sebagai penyemangat.
-    4. **Bahasa:** Selalu gunakan Bahasa Indonesia yang natural.
-  `;
+    <div id="root"></div>
 
-  try {
-    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: query }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] }
-      })
-    });
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+            BarChart, Bar, Legend, PieChart, Pie, Cell, ComposedChart, AreaChart, Area
+        } from 'recharts';
+        import { 
+            LayoutDashboard, TrendingUp, Wallet, UtensilsCrossed, Megaphone, 
+            ShieldAlert, MessageSquare, X, Bell, RefreshCw, 
+            Info, LogIn, Sparkles, LogOut, UserCog, Mail, Calendar,
+            CheckCircle, Trash2, ChevronRight, HelpCircle, Target, 
+            ChevronDown, ChevronUp, PieChart as PieIcon,
+            Store, Banknote, AlertTriangle, Lightbulb, Receipt, FileText,
+            Brain, Zap, AlertOctagon, TrendingDown, MousePointerClick,
+            Calculator, Coins, BarChart4, Building2, Loader2, ChefHat,
+            ArrowUpRight, ArrowDownRight, Lock, Activity, Search,
+            Rocket, Gauge, Crosshair, Fingerprint, ShieldCheck, Info as InfoIcon
+        } from 'lucide-react';
 
-    if (!response.ok) throw new Error('Gemini API Error');
-    const result = await response.json();
-    return result.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya sedang memproses data. Silakan coba lagi.";
-  } catch (error) {
-    console.error(error);
-    return "Maaf Mas Elang, koneksi ke otak saya sedang gangguan. Namun saya tetap memantau bisnis Anda aman.";
-  }
-};
+        // --- CONFIGURATION ---
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDKDRq6fQ8Lwgj-gZLhM_4iiJTaxFZKriY1ZZ4oC6kMjqy8QjKI8qX3Zc6EtaiDm8A/exec';
+        const ADMIN_PIN = "123456"; 
 
-// --- CHAT ASSISTANT COMPONENT (UPDATED) ---
-function ChatAssistant({ data }: { data: AppData | null }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const initialMsg: ChatMessage = { id: '1', role: 'assistant', text: 'Halo Mas Elang! Saya Qian Manager AI (Powered by Gemini Pro). Saya siap bantu analisis bisnis Warung Mbah Marto atau jawab pertanyaan apapun di dunia ini. Mau tanya apa?', timestamp: new Date() };
-  const [messages, setMessages] = useState<ChatMessage[]>([initialMsg]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+        // --- UTILS ---
+        const formatCurrency = (val) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
 
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, isOpen, isTyping]);
+        const getMockData = () => ({
+            status: "success",
+            filter_applied: "MTD",
+            period: { start: "01 Jan 2026", end: "31 Jan 2026" },
+            financials: { Pendapatan: 0, Pengeluaran: 0, Laba_Rugi: 0, Saldo_Kas: 0, Kas_Masuk: 0, Kas_Keluar: 0 },
+            sales_channels: { ShopeeFood: 0, GoFood: 0, GrabFood: 0, Offline_Cash: 0, QRIS: 0 },
+            expense_categories: { Bahan_Baku: 0, Operasional: 0, Gaji_Tetap: 0, Lain_Lain: 0 },
+            sales_potential: { target_revenue: 30000000, actual_revenue: 0, achievement_percentage: "0.0", gap_value: 0, forecast_eom: 0 },
+            fixed_costs_detail: [],
+            total_unpaid_bills: 0,
+            best_sellers: [],
+            least_sellers: [],
+            sales_prediction: { chart_data: [] },
+            fraud_alerts: [{ id: 0, risk: 'Safe', msg: 'Aman' }],
+            ai_insight: "Sedang sinkronisasi data..."
+        });
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: input, timestamp: new Date() };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setIsTyping(true);
+        const analyzeBusinessHealth = (data) => {
+            const financials = data.financials;
+            const revenue = financials.Pendapatan || 1;
+            const expenses = financials.Pengeluaran || 0;
+            const profit = financials.Laba_Rugi || 0;
+            const target = data.sales_potential.target_revenue || 30000000;
+            const actual = data.sales_potential.actual_revenue;
+            const forecast = data.sales_potential.forecast_eom || target;
+            const today = new Date();
+            const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            const remainingDays = Math.max(1, lastDay.getDate() - today.getDate());
 
-    // Call Gemini API
-    const replyText = await generateGeminiResponse(userMsg.text, data);
-    
-    setIsTyping(false);
-    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', text: replyText, timestamp: new Date() }]);
-  };
+            const profitMargin = (profit / revenue) * 100;
+            const remainingTarget = Math.max(0, target - actual);
+            const dailyTarget = remainingTarget / remainingDays;
+            
+            const fixCostTotal = (data.expense_categories.Gaji_Tetap || 1500000) + (data.total_unpaid_bills || 0);
+            const bepValue = fixCostTotal / 0.45; 
+            const bepPercent = Math.min(100, (revenue / bepValue) * 100);
 
-  return (
-    <>
-      <button onClick={() => setIsOpen(!isOpen)} className={`fixed bottom-8 right-8 z-50 p-4 rounded-full shadow-2xl hover:scale-110 transition-transform duration-300 group ${isOpen ? 'bg-red-500 rotate-90' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
-        {isOpen ? <X className="text-white h-6 w-6" /> : <MessageSquare className="text-white h-6 w-6" />}
-      </button>
-      {isOpen && (
-        <div className="fixed bottom-28 right-8 z-50 w-[350px] bg-white rounded-2xl shadow-2xl border border-slate-200 h-[500px] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white flex justify-between items-center shadow-md">
-             <div className="flex items-center gap-3">
-                <div className="p-1.5 bg-white/20 rounded-lg"><Sparkles className="h-5 w-5 text-yellow-300"/></div>
-                <div><h4 className="font-bold text-sm">Qian Manager AI</h4><p className="text-[10px] opacity-90">Powered by Gemini Pro</p></div>
-             </div>
-             <button onClick={() => setMessages([initialMsg])} title="Hapus Chat" className="hover:bg-white/20 p-2 rounded-lg transition-colors"><Trash2 className="h-4 w-4"/></button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50" ref={scrollRef}>
-             {messages.map(m => (
-                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                   <div className={`p-3 rounded-2xl text-sm max-w-[85%] shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none'}`}>
-                      {m.text}
-                      <p className={`text-[9px] mt-1.5 ${m.role==='user'?'text-blue-200':'text-slate-400'}`}>{m.timestamp.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
-                   </div>
-                </div>
-             ))}
-             {isTyping && (
-                <div className="flex justify-start">
-                   <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-600"/>
-                      <span className="text-xs text-slate-500 font-medium">Qian sedang berpikir...</span>
-                   </div>
-                </div>
-             )}
-          </div>
-          <div className="p-3 bg-white border-t">
-             <div className="flex gap-2 bg-slate-100 p-1.5 rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                <input 
-                  className="flex-1 bg-transparent border-none focus:ring-0 text-sm px-3 outline-none" 
-                  value={input} 
-                  onChange={(e) => setInput(e.target.value)} 
-                  placeholder="Ketik pertanyaan..." 
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
-                  disabled={isTyping}
-                />
-                <button 
-                  onClick={handleSend} 
-                  disabled={isTyping || !input.trim()}
-                  className="p-2 bg-blue-600 rounded-full text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
-                >
-                  <ArrowUpRight className="h-4 w-4"/>
-                </button>
-             </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
+            const channels = Object.entries(data.sales_channels).sort(([,a], [,b]) => b - a);
+            const topChannel = channels[0] ? channels[0][0] : 'Offline';
+            const topChannelVal = channels[0] ? channels[0][1] : 0;
+            
+            const adBudget = revenue * 0.12; 
+            const predictedRoi = adBudget * 4.8;
 
-function LoginPage({ onLogin }: { onLogin: (email: string) => void }) {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setTimeout(() => { if(email === ADMIN_EMAIL) onLogin(email); else alert("Email tidak terdaftar."); setLoading(false); }, 1000);
-  }
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-10 border border-white/50 backdrop-blur-xl">
-        <div className="text-center mb-10"><div className="inline-flex p-4 bg-blue-600 rounded-2xl mb-6 shadow-lg shadow-blue-200 transform hover:rotate-12 transition-transform duration-500"><TrendingUp className="h-10 w-10 text-white"/></div><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Qian Enterprise</h1><p className="text-slate-500">Business Intelligence Dashboard</p></div>
-        <form onSubmit={handleLogin} className="space-y-6"><div className="space-y-2"><Label>Email Administrator</Label><div className="relative group"><Mail className="absolute left-4 top-3 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" /><Input type="email" value={email} onChange={(e:any) => setEmail(e.target.value)} className="pl-12 h-12 bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 focus:bg-white transition-all" placeholder="admin@example.com" required /></div></div><Button type="submit" className="w-full h-12 text-lg shadow-lg shadow-blue-200" disabled={loading}>{loading ? <RefreshCw className="h-5 w-5 animate-spin"/> : 'Masuk Dashboard'}</Button></form>
-      </div>
-    </div>
-  )
-}
+            let status = 'AMAN';
+            let highlight = "BISNIS SEHAT";
+            let themeColor = "bg-emerald-600";
+            let actions = ["Pertahankan tren positif.", "Berikan bonus kecil untuk tim."];
 
-function ProfileSetupModal({ initialData, onSave, onClose }: any) {
-   const [form, setForm] = useState(initialData || { name: 'Elang Rimbawan', businessName: 'Warung Makan Mbah Marto' });
-   return (
-      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-8 rounded-3xl w-full max-w-lg shadow-2xl"><h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-slate-800"><UserCog className="h-6 w-6 text-blue-600"/> Pengaturan Profil</h2><div className="space-y-5"><div><Label>Email</Label><Input value={form.email} disabled className="bg-slate-100 text-slate-500 font-mono"/></div><div><Label>Nama Lengkap</Label><Input value={form.name} onChange={(e:any) => setForm({...form, name: e.target.value})} /></div><div><Label>Nama Bisnis</Label><Input value={form.businessName} onChange={(e:any) => setForm({...form, businessName: e.target.value})} /></div><div className="flex gap-3 pt-4"><Button variant="outline" className="w-full h-11" onClick={onClose}>Batal</Button><Button className="w-full h-11" onClick={() => onSave(form)}>Simpan Perubahan</Button></div></div></div></div>
-   )
-}
+            if (profitMargin < 15) {
+                status = 'WASPADA';
+                highlight = "MARGIN RENDAH";
+                themeColor = "bg-amber-500";
+                actions = ["Cek food waste.", "Evaluasi harga jual."];
+            } else if (financials.Saldo_Kas < data.total_unpaid_bills) {
+                status = 'BAHAYA';
+                highlight = "KRISIS KAS";
+                themeColor = "bg-rose-600";
+                actions = ["Hentikan pengeluaran non-urgent.", "Tarik dana ojol segera."];
+            }
 
-function FraudDetailModal({ alert, onClose }: { alert: FraudItem, onClose: () => void }) {
-  if (!alert) return null;
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"><div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"><div className={`p-6 ${alert.risk === 'High' ? 'bg-red-50' : 'bg-amber-50'} border-b`}><div className="flex items-center gap-3 mb-2"><ShieldAlert className={`h-8 w-8 ${alert.risk === 'High' ? 'text-red-600' : 'text-amber-600'}`} /><h2 className="text-xl font-bold text-slate-800">Analisis Risiko AI</h2></div><p className="text-sm text-slate-600">Laporan Deteksi Anomali Keuangan</p></div><div className="p-6 space-y-4"><div><Label>Status Risiko</Label><Badge variant={alert.risk === 'High' ? 'destructive' : 'warning'} className="text-sm px-3 py-1">{alert.risk} Risk</Badge></div><div className="bg-slate-50 p-4 rounded-lg border border-slate-100"><h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><Sparkles className="h-4 w-4 text-blue-500"/> Pesan Sistem:</h4><p className="text-sm text-slate-600 leading-relaxed font-medium">{alert.msg}</p></div></div><div className="p-4 bg-slate-50 border-t flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Tutup</Button><Button variant="primary" onClick={() => { alert.msg = "Laporan dikirim"; onClose(); }}>Eskalasi ke Manajemen</Button></div></div></div>
-  );
-}
+            return { 
+                status, highlight, themeColor, profitMargin, bepValue, bepPercent, 
+                dailyTarget, dailyBudget: Math.max(0, (forecast * 0.8 - expenses) / remainingDays), 
+                topChannel, topChannelVal, adBudget, predictedRoi,
+                actions, remainingDays, remainingTarget, forecast
+            };
+        };
 
-// --- HEADER ---
-function Header({ profile, onLogout, notifications, onReadNotif, onEditProfile }: any) {
-  const [showNotif, setShowNotif] = useState(false);
-  const unreadCount = notifications.filter((n:any) => !n.read).length;
+        // --- UI COMPONENTS ---
+        const Card = ({ children, className = '', onClick }) => (
+            <div onClick={onClick} className={`bg-white rounded-[2.5rem] border border-slate-100 shadow-sm transition-all duration-300 ${onClick ? 'cursor-pointer hover:shadow-xl active:scale-[0.98]' : ''} ${className}`}>{children}</div>
+        );
 
-  return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className="bg-gradient-to-br from-indigo-600 to-blue-500 p-2.5 rounded-xl text-white shadow-blue-200 shadow-lg transform rotate-3 hover:rotate-0 transition-all duration-300">
-           <ChefHat className="h-6 w-6" />
-        </div>
-        <div>
-           <h1 className="font-serif font-bold text-2xl tracking-tight text-slate-800 leading-none">QIAN AI</h1>
-           <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Warung Makan Mbah Marto</p>
-        </div>
-      </div>
-      
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" className="hidden md:flex text-slate-500" onClick={() => window.open(`mailto:${ADMIN_EMAIL}`)}>
-           <HelpCircle className="h-4 w-4 mr-2" /> Support
-        </Button>
-        <div className="relative">
-          <Button variant="ghost" size="icon" onClick={() => { setShowNotif(!showNotif); if(!showNotif && unreadCount>0) onReadNotif(); }} className="relative text-slate-500 hover:bg-slate-100 rounded-full">
-            <Bell className="h-5 w-5" />
-            {unreadCount > 0 && <span className="absolute top-2 right-2 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"/>}
-          </Button>
-          {showNotif && (
-            <div className="absolute right-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 p-0 z-50 animate-in zoom-in-95 overflow-hidden">
-              <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
-                 <span className="font-bold text-sm text-slate-700">Notifikasi</span>
-                 <span className="text-xs text-blue-600 cursor-pointer hover:underline" onClick={onReadNotif}>Mark read</span>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                {notifications.length === 0 ? <div className="p-8 text-center text-slate-400 text-xs">Tidak ada notifikasi baru</div> : 
-                  notifications.map((n:any) => (
-                    <div key={n.id} className={`p-4 border-b last:border-0 hover:bg-slate-50 transition-colors ${!n.read ? 'bg-blue-50/40' : ''}`}>
-                      <div className="flex justify-between items-start mb-1">
-                        <strong className="text-sm text-slate-800">{n.title}</strong>
-                        <span className="text-[10px] text-slate-400">{n.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">{n.message}</p>
+        const Badge = ({ children, variant = 'default', className = '' }) => {
+            const variants = { default: "bg-blue-100 text-blue-700", success: "bg-emerald-100 text-emerald-700", warning: "bg-amber-100 text-amber-700", destructive: "bg-rose-100 text-rose-700" };
+            return <div className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${variants[variant]} ${className}`}>{children}</div>;
+        };
+
+        const Button = ({ children, variant = 'primary', size = 'md', className = '', ...props }) => {
+            const variants = { primary: "bg-blue-600 text-white hover:bg-blue-700 shadow-lg", outline: "border border-slate-200 bg-white hover:bg-slate-50", ghost: "text-slate-500 hover:bg-slate-100" };
+            const sizes = { sm: "h-8 px-4 text-xs", md: "h-11 px-6 py-2", lg: "h-12 px-8 text-lg" };
+            return <button className={`inline-flex items-center justify-center rounded-2xl font-bold transition-all active:scale-95 ${variants[variant]} ${sizes[size]} ${className}`} {...props}>{children}</button>;
+        };
+
+        // --- SECTIONS ---
+
+        // 1. FINANCIALS (FIXED: Individual Expand logic)
+        function FinancialSection({ data }) {
+            const [expanded, setExpanded] = useState(null);
+            const metrics = [
+                { id: 'revenue', label: 'Pendapatan', value: data.financials.Pendapatan, icon: Wallet, color: 'text-blue-600', bg: 'bg-blue-50' },
+                { id: 'expense', label: 'Pengeluaran', value: data.financials.Pengeluaran, icon: ArrowUpRight, color: 'text-rose-600', bg: 'bg-rose-50' },
+                { id: 'profit', label: 'Laba Bersih', value: data.financials.Laba_Rugi, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+            ];
+
+            const toggleExpand = (id) => {
+                if (id === 'profit') return;
+                setExpanded(expanded === id ? null : id);
+            };
+
+            return (
+                <div className="space-y-6 animate-in">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {metrics.map(m => (
+                            <Card key={m.id} className="p-6 md:p-5" onClick={() => toggleExpand(m.id)}>
+                                <div className="flex justify-between items-start gap-2">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest truncate">{m.label}</p>
+                                        <h3 className={`text-xl md:text-[1.35rem] font-black mt-1 ${m.color} whitespace-nowrap overflow-hidden text-ellipsis`}>
+                                            {formatCurrency(m.value)}
+                                        </h3>
+                                    </div>
+                                    <div className={`p-3 rounded-2xl ${m.bg} flex-shrink-0`}><m.icon className="h-5 w-5 md:h-6 md:w-6"/></div>
+                                </div>
+                                {expanded === m.id && (
+                                    <div className="mt-4 pt-4 border-t border-slate-100 space-y-2 animate-in">
+                                        {Object.entries(m.id === 'revenue' ? data.sales_channels : data.expense_categories).map(([k, v]) => (
+                                            <div key={k} className="flex justify-between text-[11px] font-bold gap-4">
+                                                <span className="text-slate-500 truncate">{k.replace('_', ' ')}</span>
+                                                <span className="whitespace-nowrap text-slate-800">{formatCurrency(v)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </Card>
+                        ))}
                     </div>
-                  ))
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Card className="p-5 flex items-center justify-between" onClick={() => toggleExpand('cash')}>
+                            <div className="flex items-center gap-4 min-w-0">
+                                <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 flex-shrink-0"><Banknote size={24}/></div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saldo Kas Akhir</p>
+                                    <h4 className="text-lg font-black text-indigo-600 whitespace-nowrap overflow-hidden text-ellipsis">{formatCurrency(data.financials.Saldo_Kas)}</h4>
+                                </div>
+                            </div>
+                            <ChevronDown className={`text-slate-300 transition-transform flex-shrink-0 ${expanded === 'cash' ? 'rotate-180' : ''}`} />
+                        </Card>
+                        <Card className="p-5 bg-slate-900 border-none text-white flex items-center gap-4 shadow-xl">
+                            <div className="p-3 bg-white/10 rounded-2xl text-amber-400 flex-shrink-0"><AlertTriangle size={24}/></div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hutang Berjalan</p>
+                                <h4 className="text-lg font-black text-amber-500 whitespace-nowrap overflow-hidden text-ellipsis">{formatCurrency(data.total_unpaid_bills || 0)}</h4>
+                            </div>
+                        </Card>
+                    </div>
+                    {expanded === 'cash' && (
+                        <Card className="p-6 bg-indigo-50/50 border-indigo-100 animate-in">
+                            <div className="grid grid-cols-2 gap-6 text-center">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 uppercase font-black tracking-wider">Kas Masuk</p>
+                                    <p className="text-lg font-black text-emerald-600">{formatCurrency(data.financials.Kas_Masuk || 0)}</p>
+                                </div>
+                                <div className="space-y-1 border-l border-indigo-100">
+                                    <p className="text-[10px] text-slate-500 uppercase font-black tracking-wider">Kas Keluar</p>
+                                    <p className="text-lg font-black text-rose-600">{formatCurrency(data.financials.Kas_Keluar || 0)}</p>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+                </div>
+            );
+        }
+
+        // 2. SALES POTENTIAL (MODIFIED: PRO BACKGROUND & DETAILED CHART)
+        function SalesPotentialSection({ data }) {
+            const [showChart, setShowChart] = useState(false); 
+            const actual = data.sales_potential.actual_revenue;
+            const target = data.sales_potential.target_revenue;
+            const forecast = data.sales_potential.forecast_eom || target;
+            const percentAchieved = target > 0 ? ((actual / target) * 100).toFixed(1) : "0";
+            const percentForecast = target > 0 ? ((forecast / target) * 100).toFixed(1) : "0";
+            const gap = Math.max(0, target - actual);
+            
+            return (
+                <div className="space-y-6">
+                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 px-1"><Target className="h-6 w-6 text-indigo-600"/> SALES POTENTIAL</h3>
+                    <div className="grid grid-cols-1 gap-6">
+                        <Card className="p-8 md:p-12 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px] bg-tech border-slate-200">
+                            {/* Decorative Elements */}
+                            <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-slate-100/50 to-transparent pointer-events-none"></div>
+                            <div className="absolute top-10 right-10 opacity-5 pointer-events-none rotate-12"><Activity size={180}/></div>
+                            
+                            {/* LARGE DONUT */}
+                            <div className="relative w-full max-w-[340px] aspect-square flex items-center justify-center animate-in">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={[{v: actual, c:'#1e1b4b'}, {v: gap, c:'#f1f5f9'}]} 
+                                             innerRadius="78%" outerRadius="98%" startAngle={90} endAngle={-270} dataKey="v" stroke="none" cornerRadius={12} paddingAngle={3}>
+                                            <Cell fill="#1e1b4b" />
+                                            <Cell fill="#f1f5f9" />
+                                        </Pie>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
+                                    <p className="text-6xl md:text-7xl font-black text-slate-900 tracking-tighter leading-none">{percentAchieved}%</p>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase mt-4 tracking-[0.4em]">Target Reached</p>
+                                </div>
+                            </div>
+
+                            {/* STATS GRID */}
+                            <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-3 gap-4 mt-12 relative z-10">
+                                <div className="text-center p-6 bg-white/80 backdrop-blur rounded-[2rem] border border-slate-100 shadow-sm min-w-0">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Base Target</p>
+                                    <p className="font-black text-slate-900 text-lg md:text-xl">{formatCurrency(target)}</p>
+                                </div>
+                                <div className="text-center p-6 bg-slate-900 rounded-[2rem] border border-slate-800 shadow-xl min-w-0">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Current Actual</p>
+                                    <p className="font-black text-white text-lg md:text-xl">{formatCurrency(actual)}</p>
+                                </div>
+                                <div className="text-center p-6 bg-rose-50 rounded-[2rem] border border-rose-100 shadow-sm min-w-0">
+                                    <p className="text-[9px] font-black text-rose-400 uppercase mb-2 tracking-widest">Gap Value</p>
+                                    <p className="font-black text-rose-700 text-lg md:text-xl">{formatCurrency(gap)}</p>
+                                </div>
+                            </div>
+
+                            {/* PREDIKSI TOGGLE */}
+                            <div className="w-full max-w-md mt-6 relative z-10">
+                                <button onClick={() => setShowChart(!showChart)} className={`w-full p-6 rounded-[2.5rem] border-2 transition-all duration-500 flex flex-col items-center justify-center gap-1 group overflow-hidden ${showChart ? 'bg-indigo-700 border-indigo-700 text-white shadow-2xl shadow-indigo-300' : 'bg-white border-slate-200 hover:border-indigo-400 hover:shadow-lg'}`}>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Sparkles className={`h-4 w-4 ${showChart ? 'text-indigo-200 animate-pulse' : 'text-indigo-600'}`}/>
+                                        <p className={`text-[10px] font-black uppercase tracking-[0.25em] ${showChart ? 'text-indigo-100' : 'text-slate-400'}`}>AI Smart Prediction</p>
+                                    </div>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-2xl md:text-3xl font-black italic tracking-tight">{formatCurrency(forecast)}</span>
+                                        <span className={`text-sm font-bold ${showChart ? 'text-indigo-200' : 'text-indigo-600'}`}>({percentForecast}%)</span>
+                                    </div>
+                                    <div className={`mt-3 flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest ${showChart ? 'bg-white/10' : 'bg-indigo-50 text-indigo-600'}`}>
+                                        {showChart ? 'Close Visual Data' : 'View Deep Analysis'} <ChevronDown size={10} className={`transition-transform ${showChart ? 'rotate-180' : ''}`}/>
+                                    </div>
+                                </button>
+                            </div>
+
+                            {/* DETAILED AREA CHART */}
+                            {showChart && (
+                                <div className="w-full max-w-4xl mt-12 animate-in space-y-6">
+                                    <div className="h-[320px] w-full bg-white/50 backdrop-blur rounded-[2.5rem] border border-slate-100 p-8 shadow-inner relative">
+                                        <div className="absolute top-4 left-8"><Badge variant="default">Daily Revenue Trend (Predicted)</Badge></div>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={data.sales_prediction?.chart_data} margin={{top:40, right:10, left:-20, bottom:0}}>
+                                                <defs>
+                                                    <linearGradient id="colorPredicted" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                                <XAxis dataKey="month" fontSize={10} axisLine={false} tickLine={false} tick={{fontWeight:700, fill:'#94a3b8'}} />
+                                                <YAxis hide />
+                                                <Tooltip 
+                                                    contentStyle={{borderRadius:'24px', border:'none', boxShadow:'0 20px 40px rgba(0,0,0,0.1)', padding:'16px'}}
+                                                    formatter={v => [formatCurrency(v), 'Est. Revenue']}
+                                                />
+                                                <Area type="monotone" dataKey="predicted" stroke="#4f46e5" strokeWidth={4} fillOpacity={1} fill="url(#colorPredicted)" />
+                                                <Area type="monotone" dataKey="actual" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="5 5" fill="transparent" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm flex gap-4">
+                                            <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600 h-fit"><Brain size={24}/></div>
+                                            <div>
+                                                <h5 className="text-[11px] font-black text-indigo-900 uppercase tracking-widest mb-1">AI Contextual Insight</h5>
+                                                <p className="text-[11px] text-slate-500 font-medium italic leading-relaxed">"AI mendeteksi pola kenaikan 14.5% pada akhir pekan. Disarankan untuk menambah buffer stok bahan baku sebesar 10% untuk menghindari loss sales."</p>
+                                            </div>
+                                        </div>
+                                        <div className="p-6 bg-slate-900 rounded-3xl border border-slate-800 shadow-sm flex gap-4">
+                                            <div className="bg-white/10 p-3 rounded-2xl text-emerald-400 h-fit"><TrendingUp size={24}/></div>
+                                            <div>
+                                                <h5 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest mb-1">Performance Verdict</h5>
+                                                <p className="text-[11px] text-slate-300 font-medium italic leading-relaxed">"{actual >= (target * 0.5) ? 'Bisnis Anda sedang berada dalam jalur akselerasi. Prediksi menunjukkan target bulanan akan tercapai H-2 periode.' : 'Volume penjualan membutuhkan dorongan iklan ojol lebih agresif minggu ini.'}"</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    </div>
+                </div>
+            );
+        }
+
+        // 3. BILL TRACKER
+        function BillTrackerSection({ data }) {
+            const bills = [...(data.fixed_costs_detail || [])];
+            if (!bills.some(b => b.nama_tagihan.toLowerCase().includes('esb'))) {
+                bills.push({ nama_tagihan: 'Kasir ESB (Auto)', target_tagihan: 125000, nominal_terbayar: 0, sisa_tagihan: 125000, status: 'BELUM' });
+            }
+
+            return (
+                <div className="space-y-4">
+                    <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 px-1"><Receipt className="h-5 w-5 text-rose-500"/> TAGIHAN OPERASIONAL</h3>
+                    <div className="space-y-3">
+                        {bills.map((bill, i) => {
+                            const progress = Math.min(100, (bill.nominal_terbayar / bill.target_tagihan) * 100);
+                            const isPaid = bill.sisa_tagihan <= 0;
+                            return (
+                                <Card key={i} className={`p-4 border-none shadow-sm ${isPaid ? 'bg-emerald-50/50' : 'bg-white'}`}>
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                        <div className="flex items-center gap-4 w-full sm:w-auto min-w-0">
+                                            <div className={`p-3 rounded-2xl flex-shrink-0 ${isPaid ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' : 'bg-rose-50 text-rose-500'}`}>
+                                                {isPaid ? <CheckCircle size={20}/> : <FileText size={20}/>}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h5 className="font-bold text-sm text-slate-800 truncate uppercase tracking-tight">{bill.nama_tagihan}</h5>
+                                                <p className="text-[10px] text-slate-400 font-extrabold uppercase">{formatCurrency(bill.target_tagihan)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="w-full sm:flex-1 sm:max-w-[250px] space-y-2 min-w-0">
+                                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                                <div className={`h-full transition-all duration-1000 ${isPaid ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{width:`${progress}%`}}></div>
+                                            </div>
+                                            <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-tighter">
+                                                <span className={isPaid ? 'text-emerald-600' : 'text-slate-400'}>{progress.toFixed(0)}% LUNAS</span>
+                                                {!isPaid && <span className="text-rose-600 font-bold">SISA {formatCurrency(bill.sisa_tagihan)}</span>}
+                                            </div>
+                                        </div>
+                                        <Badge variant={isPaid ? 'success' : 'destructive'} className="sm:w-20 text-center flex-shrink-0">{isPaid ? 'OK' : 'BELUM'}</Badge>
+                                    </div>
+                                </Card>
+                            )
+                        })}
+                    </div>
+                </div>
+            )
+        }
+
+        // 4. RECOMMENDATION CENTER (FIXED: Health Check Audit with %)
+        function RecommendationCenter({ data }) {
+            const [tab, setTab] = useState('menu');
+            const h = analyzeBusinessHealth(data);
+            const revenue = data.financials.Pendapatan || 1;
+
+            // Health percentages
+            const ratios = {
+                bahanBaku: ((data.expense_categories.Bahan_Baku || 0) / revenue) * 100,
+                gaji: ((data.expense_categories.Gaji_Tetap || 0) / revenue) * 100,
+                operasional: ((data.expense_categories.Operasional || 0) / revenue) * 100,
+                profit: (data.financials.Laba_Rugi / revenue) * 100
+            };
+
+            const getStatus = (val, type) => {
+                if (type === 'bahan') return val <= 40 ? { label: 'SEHAT', color: 'text-emerald-600' } : { label: 'TINGGI', color: 'text-rose-600' };
+                if (type === 'gaji') return val <= 20 ? { label: 'SEHAT', color: 'text-emerald-600' } : { label: 'TINGGI', color: 'text-rose-600' };
+                if (type === 'profit') return val >= 15 ? { label: 'OPTIMAL', color: 'text-indigo-600' } : { label: 'TIPIS', color: 'text-amber-600' };
+                return { label: 'NORMAL', color: 'text-slate-600' };
+            };
+
+            return (
+                <div className="space-y-4">
+                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 px-1"><Lightbulb className="h-6 w-6 text-yellow-500"/> RECOMMENDATIONS</h3>
+                    <Card className="overflow-hidden border-none shadow-sm">
+                        <div className="flex bg-slate-50 border-b overflow-x-auto no-scrollbar">
+                            <button onClick={() => setTab('menu')} className={`flex-1 min-w-[120px] py-4 text-xs font-black uppercase tracking-widest ${tab === 'menu' ? 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm' : 'text-slate-400'}`}>Menu Strategy</button>
+                            <button onClick={() => setTab('promo')} className={`flex-1 min-w-[120px] py-4 text-xs font-black uppercase tracking-widest ${tab === 'promo' ? 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm' : 'text-slate-400'}`}>Smart Promo</button>
+                            <button onClick={() => setTab('health')} className={`flex-1 min-w-[120px] py-4 text-xs font-black uppercase tracking-widest ${tab === 'health' ? 'bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm' : 'text-slate-400'}`}>Business Audit</button>
+                        </div>
+                        <div className="p-6 md:p-8 min-h-[300px]">
+                            {tab === 'menu' && (
+                                <div className="space-y-8 animate-in">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-3"><h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2 mb-2"><TrendingUp size={14}/> Top 5 Terlaris</h4>{data.best_sellers?.slice(0,5).map((m,i)=><div key={i} className="flex justify-between p-3 bg-emerald-50 rounded-2xl border border-emerald-100 min-w-0"><span className="text-xs font-bold text-slate-700 truncate mr-2">{i+1}. {m.name}</span><span className="text-[10px] bg-white px-2 py-1 rounded-lg font-black shadow-sm flex-shrink-0">{m.qty} sold</span></div>)}</div>
+                                        <div className="space-y-3"><h4 className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-2 mb-2"><TrendingDown size={14}/> Top 5 Kurang Laku</h4>{data.least_sellers?.slice(0,5).map((m,i)=><div key={i} className="flex justify-between p-3 bg-rose-50 rounded-2xl border border-rose-100 min-w-0"><span className="text-xs font-bold text-slate-700 truncate mr-2">{i+1}. {m.name}</span><span className="text-[10px] bg-white px-2 py-1 rounded-lg font-black shadow-sm flex-shrink-0">{m.qty} sold</span></div>)}</div>
+                                    </div>
+                                    <div className="bg-slate-900 text-white p-6 rounded-[2rem] relative overflow-hidden">
+                                        <div className="absolute -right-6 -bottom-6 opacity-10 rotate-12"><Brain size={120}/></div>
+                                        <div className="relative z-10 flex gap-4">
+                                            <div className="bg-indigo-500/20 p-2 rounded-xl h-fit border border-indigo-500/30 flex-shrink-0"><Zap size={20} className="text-indigo-400"/></div>
+                                            <div>
+                                                <h5 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">AI Menu Analysis</h5>
+                                                <p className="text-xs text-slate-300 italic leading-relaxed">"Menu terlaris memberikan performa HPP yang efisien. Tingkatkan kualitas penyajian untuk menu terlaris dan buat paket bundling ojol untuk menghabiskan stok menu kurang laku."</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {tab === 'promo' && (
+                                <div className="space-y-6 animate-in">
+                                    <div className="bg-gradient-to-br from-indigo-600 to-blue-700 text-white p-6 rounded-[2rem] shadow-xl shadow-indigo-100">
+                                        <div className="flex items-center gap-4 mb-4"><div className="p-3 bg-white/20 rounded-2xl flex-shrink-0"><Megaphone size={28}/></div><h4 className="font-black text-lg uppercase tracking-tighter">Strategic Promotion</h4></div>
+                                        <p className="text-xs text-indigo-100 font-bold leading-relaxed">"Saran AI: Batas diskon maksimal adalah 18%. Fokuskan promo pada hari Selasa-Kamis untuk meningkatkan volume di hari sepi."</p>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Object.entries(data.sales_channels).map(([k,v]) => (
+                                        <div key={k} className="flex justify-between items-center p-4 border rounded-2xl bg-white shadow-sm hover:border-blue-400 transition-colors min-w-0">
+                                            <div className="min-w-0 flex-1 mr-4"><p className="font-bold text-slate-800 truncate text-sm uppercase">{k}</p><p className="text-[9px] text-slate-400 font-black uppercase tracking-wider">Budget Max (Bulanan)</p></div>
+                                            <p className="font-black text-indigo-600 text-sm whitespace-nowrap flex-shrink-0">{formatCurrency(v * 0.15)}</p>
+                                        </div>
+                                    ))}</div>
+                                </div>
+                            )}
+                            {tab === 'health' && (
+                                <div className="space-y-6 animate-in">
+                                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                                        <div className="relative mb-6">
+                                            <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-20"></div>
+                                            <div className="relative z-10 w-24 h-24 bg-emerald-500 rounded-full shadow-2xl flex items-center justify-center pulse-green">
+                                                <ShieldCheck size={48} className="text-white"/>
+                                            </div>
+                                        </div>
+                                        <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">BUSINESS HEALTH CHECK</h3>
+                                        <p className="text-slate-500 mt-1 max-w-sm text-xs font-bold leading-relaxed italic uppercase tracking-wider">Audit Efisiensi berdasarkan Standar Industri Kuliner</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {[
+                                            { label: 'Food Cost (Bahan Baku)', val: ratios.bahanBaku, type: 'bahan', target: '30-40%', icon: UtensilsCrossed },
+                                            { label: 'Staff Cost (Gaji)', val: ratios.gaji, type: 'gaji', target: '15-20%', icon: UserCog },
+                                            { label: 'Utility (Operasional)', val: ratios.operasional, type: 'ops', target: '10-15%', icon: Zap },
+                                            { label: 'Profit Margin', val: ratios.profit, type: 'profit', target: '15-25%+', icon: TrendingUp }
+                                        ].map((item, idx) => {
+                                            const status = getStatus(item.val, item.type);
+                                            return (
+                                                <div key={idx} className="bg-slate-50 border border-slate-100 p-5 rounded-3xl group transition-all hover:bg-white hover:shadow-md">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="p-2.5 bg-white rounded-xl shadow-sm text-slate-400 group-hover:text-indigo-600 transition-colors"><item.icon size={18}/></div>
+                                                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full bg-white shadow-sm border border-slate-100 ${status.color}`}>{status.label}</span>
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
+                                                    <div className="flex items-baseline gap-2">
+                                                        <h4 className="text-2xl font-black text-slate-800">{item.val.toFixed(1)}%</h4>
+                                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Ideaal: {item.target}</p>
+                                                    </div>
+                                                    <div className="w-full h-1.5 bg-slate-200 rounded-full mt-3 overflow-hidden">
+                                                        <div className={`h-full ${status.color.replace('text', 'bg')} transition-all duration-1000`} style={{width: `${Math.min(item.val, 100)}%`}}></div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    <div className="bg-indigo-600 p-6 rounded-[2rem] text-white shadow-lg relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10"><InfoIcon size={80}/></div>
+                                        <div className="relative z-10">
+                                            <h5 className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-2 flex items-center gap-2"><Sparkles size={14}/> Final AI Audit Report</h5>
+                                            <p className="text-xs font-bold leading-relaxed italic">
+                                                "Mas Elang, bisnis Warung Mbah Marto saat ini berada dalam kondisi <span className="underline decoration-indigo-300">{h.status}</span>. {ratios.profit >= 15 ? 'Margin laba Anda sangat sehat karena penghematan biaya sewa ruko.' : 'Tingkatkan omset harian melalui ojol agar rasio biaya tetap (gaji) bisa ditekan lebih rendah lagi.'}"
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </Card>
+                </div>
+            )
+        }
+
+        // 5. CULINARYPRO AI ENGINE
+        function AiCommandCenter({ data }) {
+            const h = analyzeBusinessHealth(data);
+            const [activeTab, setActiveTab] = useState('Finance');
+
+            return (
+                <div className="mt-12 mb-20">
+                    <div className="glass-dark rounded-[3rem] shadow-2xl p-6 md:p-10 text-white relative overflow-hidden border-none shadow-indigo-200">
+                        <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none"><Zap size={200} className="text-blue-500 animate-pulse"/></div>
+                        
+                        <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-center gap-6 mb-10">
+                            <div className="flex items-center gap-4">
+                                <div className="p-4 bg-blue-500/20 rounded-3xl border border-blue-500/30 flex-shrink-0"><Brain className="text-blue-400" size={32}/></div>
+                                <div className="min-w-0"><h2 className="text-2xl md:text-3xl font-black tracking-tighter neon-text uppercase italic leading-none">CulinaryPro Intelligence</h2><p className="text-[10px] text-blue-400 font-extrabold tracking-[0.2em] uppercase opacity-70 mt-1">Mbah Marto Intelligence Engine</p></div>
+                            </div>
+                            <div className="text-center md:text-right flex-shrink-0">
+                                <div className={`inline-flex items-center gap-3 px-6 py-2 rounded-full border border-white/20 shadow-lg mb-2 ${h.status === 'AMAN' ? 'bg-emerald-600 pulse-green' : 'bg-rose-600 pulse-red'}`}>
+                                    <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
+                                    <span className="text-xs font-black uppercase tracking-[0.2em]">{h.status}</span>
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1 tracking-wider">{h.highlight}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex bg-white/5 p-1.5 rounded-2xl mb-10 border border-white/10 overflow-x-auto no-scrollbar relative z-30">
+                            <button onClick={()=>setActiveTab('Ad')} className={`flex-1 py-3 px-4 whitespace-nowrap text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab==='Ad'?'bg-blue-600 text-white shadow-xl shadow-blue-500/40':'text-slate-500 hover:text-white'}`}>Advertising Strategist</button>
+                            <button onClick={()=>setActiveTab('Finance')} className={`flex-1 py-3 px-4 whitespace-nowrap text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab==='Finance'?'bg-blue-600 text-white shadow-xl shadow-blue-500/40':'text-slate-500 hover:text-white'}`}>Financial Forecast</button>
+                            <button onClick={()=>setActiveTab('Cash')} className={`flex-1 py-3 px-4 whitespace-nowrap text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab==='Cash'?'bg-blue-600 text-white shadow-xl shadow-blue-500/40':'text-slate-500 hover:text-white'}`}>Cash Flow Strategy</button>
+                        </div>
+
+                        <div className="relative z-10 min-h-[350px]">
+                            {activeTab === 'Ad' && (
+                                <div className="space-y-8 animate-in">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        <div className="p-6 bg-white/5 rounded-3xl border border-white/10 min-w-0"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Ad Budget Recommendation</p><p className="text-2xl font-black text-white whitespace-nowrap overflow-hidden text-ellipsis">{formatCurrency(h.adBudget)}</p><p className="text-[9px] text-blue-400 mt-2 font-bold uppercase italic tracking-wider">Scale-up Factor: 4.8x</p></div>
+                                        <div className="p-6 bg-white/5 rounded-3xl border border-white/10 min-w-0"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Estimated Growth ROI</p><p className="text-2xl font-black text-emerald-400 whitespace-nowrap overflow-hidden text-ellipsis">+{formatCurrency(h.predictedRoi)}</p><p className="text-[9px] text-slate-500 mt-2 font-bold uppercase italic tracking-wider">Performa Digital</p></div>
+                                        <div className="p-6 bg-white/5 rounded-3xl border border-white/10"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Key Segments</p><div className="flex flex-wrap gap-2 mt-1">{['Mahasiswa', 'Penyetan', 'Murah Enak'].map(k=><span key={k} className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-lg text-[10px] font-black tracking-tighter">#{k}</span>)}</div></div>
+                                    </div>
+                                    <div className="p-6 bg-indigo-900/40 rounded-3xl border border-indigo-500/30 flex gap-4">
+                                        <div className="flex-shrink-0 bg-indigo-500/20 p-2 rounded-xl h-fit"><Rocket className="text-indigo-400" size={24}/></div>
+                                        <div>
+                                            <h5 className="font-black text-indigo-400 text-sm mb-1 uppercase tracking-tighter">AI Professional Ad Tactic:</h5>
+                                            <p className="text-sm text-slate-300 leading-relaxed italic">"Gunakan platform <strong>{h.topChannel}</strong> sebagai penggerak utama. AI mendeteksi lonjakan trafik di hari Jumat Sore, naikkan budget ads 2x lipat pada jam 16:00 - 19:00 untuk memaksimalkan ROI."</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'Finance' && (
+                                <div className="space-y-8 animate-in">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="p-8 bg-white/5 rounded-[2.5rem] border border-white/10">
+                                            <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Net Profit Margin Analysis</h5>
+                                            <div className="flex items-end gap-3 justify-center sm:justify-start">
+                                                <h3 className={`text-5xl font-black leading-none ${h.profitMargin > 15 ? 'text-emerald-400' : 'text-amber-400'}`}>{h.profitMargin.toFixed(1)}%</h3>
+                                                <p className="text-sm text-slate-500 font-black uppercase mb-1 whitespace-nowrap overflow-hidden">Profitability Index</p>
+                                            </div>
+                                            <div className="mt-8 p-6 bg-black/40 rounded-3xl border border-white/10">
+                                                <p className="text-[10px] text-emerald-400 font-black uppercase mb-2 flex items-center gap-2 tracking-widest"><Sparkles size={14}/> AI Insight Analysis:</p>
+                                                <p className="text-xs text-slate-300 leading-relaxed italic">"Margin Anda terjaga stabil karena absennya beban sewa tempat. Fokus pada audit bahan baku di platform online (Gofood/Grabfood) untuk memastikan potongan komisi platform tidak menggerus margin bersih Anda di bawah 15%."</p>
+                                            </div>
+                                        </div>
+                                        <div className="p-8 bg-white/5 rounded-[2.5rem] border border-white/10 flex flex-col justify-center">
+                                            <div className="flex justify-between items-end mb-4 min-w-0"><h3 className="text-4xl font-black text-blue-400 leading-none tracking-tighter whitespace-nowrap overflow-hidden">{h.bepPercent.toFixed(0)}%</h3><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 flex-shrink-0">BEP TIER 1</p></div>
+                                            <div className="w-full h-4 bg-white/10 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-blue-500 transition-all duration-1000 shadow-[0_0_20px_#3b82f6]" style={{width:`${h.bepPercent}%`}}></div></div>
+                                            <p className="text-xs text-slate-400 mt-6 leading-relaxed font-bold uppercase tracking-wider">Goal Operasional Lunas: <span className="text-white whitespace-nowrap">{formatCurrency(h.bepValue)}</span>. Capai ini untuk mengamankan gaji & listrik.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'Cash' && (
+                                <div className="space-y-8 animate-in">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="bg-emerald-600/10 border-emerald-500/20 p-8 rounded-[2.5rem] text-center border">
+                                            <h5 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Target Harian Wajib</h5>
+                                            <h2 className="text-3xl md:text-4xl font-black text-white whitespace-nowrap overflow-hidden text-ellipsis leading-none">{formatCurrency(h.dailyTarget)}</h2>
+                                            <div className="mt-6 bg-emerald-500/20 p-4 rounded-3xl border border-emerald-500/30">
+                                                <p className="text-[9px] text-emerald-400 font-black uppercase mb-1 flex items-center justify-center gap-2"><Activity size={12}/> AI Analysis:</p>
+                                                <p className="text-xs text-emerald-100 italic leading-relaxed">"Perhitungan: {formatCurrency(h.remainingTarget)} / {h.remainingDays} hari sisa. Wajib dicapai setiap hari agar target bulanan tercapai 100%."</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-rose-600/10 border-rose-500/20 p-8 rounded-[2.5rem] text-center border">
+                                            <h5 className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2">Batas Belanja Harian</h5>
+                                            <h2 className="text-3xl md:text-4xl font-black text-white whitespace-nowrap overflow-hidden text-ellipsis leading-none">{formatCurrency(h.dailyBudget)}</h2>
+                                            <div className="mt-6 bg-rose-500/20 p-4 rounded-3xl border border-rose-500/30">
+                                                <p className="text-[9px] text-rose-400 font-black uppercase mb-1 flex items-center justify-center gap-2"><Target size={12}/> AI Analysis:</p>
+                                                <p className="text-xs text-rose-100 italic leading-relaxed">"Batas belanja dapur harian agar arus kas Anda tetap aman hingga akhir bulan meskipun pendapatan sedang stagnan."</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {h.actions.map((act, i) => (
+                                            <div key={i} className="flex items-center gap-4 p-5 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all cursor-default group min-w-0">
+                                                <div className="p-2.5 bg-emerald-500/20 rounded-xl text-emerald-400 group-hover:scale-110 transition-transform flex-shrink-0"><CheckCircle size={20}/></div>
+                                                <span className="text-xs font-bold text-slate-200 uppercase tracking-tight leading-tight truncate">{act}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        // --- LOGIN PAGE ---
+        function LoginPage({ onLogin }) {
+            const [pin, setPin] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(false);
+
+            const handlePin = (val) => {
+                if (pin.length < 6) {
+                    const newPin = pin + val;
+                    setPin(newPin);
+                    if (newPin.length === 6) {
+                        setLoading(true);
+                        setTimeout(() => {
+                            if (newPin === ADMIN_PIN) {
+                                onLogin({ name: 'Elang Rimbawan' });
+                            } else {
+                                setError(true);
+                                setPin('');
+                                setLoading(false);
+                                setTimeout(() => setError(false), 2000);
+                            }
+                        }, 1200);
+                    }
                 }
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="relative group pl-4 border-l border-slate-200">
-           <div className="flex items-center gap-3 cursor-pointer">
-              <div className="text-right hidden md:block">
-                 <p className="text-sm font-bold text-slate-800 leading-none">{profile?.name}</p>
-                 <p className="text-xs text-slate-500 mt-0.5">{profile?.businessName}</p>
-              </div>
-              <div className="h-10 w-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold shadow-md hover:scale-105 transition-transform">
-                {profile?.name?.charAt(0) || 'U'}
-              </div>
-           </div>
-           <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-slate-100 p-1 z-50 hidden group-hover:block animate-in zoom-in-95">
-             <div className="md:hidden px-4 py-3 border-b border-slate-50">
-               <p className="font-bold text-slate-800">{profile?.name}</p>
-               <p className="text-xs text-slate-500">{profile?.businessName}</p>
-             </div>
-             <button onClick={onEditProfile} className="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-3 transition-colors">
-               <UserCog className="h-4 w-4" /> Pengaturan Profil
-             </button>
-             <div className="h-px bg-slate-100 my-1"></div>
-             <button onClick={onLogout} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-3 transition-colors">
-               <LogOut className="h-4 w-4" /> Keluar Aplikasi
-             </button>
-           </div>
-        </div>
-      </div>
-    </header>
-  );
-}
+            };
 
-// --- MAIN APP ---
-export default function App() {
-   const [user, setUser] = useState<UserProfile | null>(null);
-   const [showSetup, setShowSetup] = useState(false);
-   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-   const [filter, setFilter] = useState('MTD');
-   const [selectedFraudAlert, setSelectedFraudAlert] = useState<FraudItem | null>(null);
-   
-   const { data, loading, error, refetch } = useData(filter);
+            return (
+                <div className="min-h-screen bg-animate flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/20 rounded-full blur-[120px] animate-pulse"></div>
+                    <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/20 rounded-full blur-[120px] animate-pulse"></div>
+                    {loading && (
+                        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-xl">
+                            <div className="relative w-48 h-48 mb-8">
+                                <div className="absolute inset-0 border-[6px] border-blue-500/10 rounded-full"></div>
+                                <div className="absolute inset-0 border-[6px] border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                <div className="absolute inset-4 border-[6px] border-indigo-500 border-b-transparent rounded-full animate-spin" style={{animationDirection:'reverse', animationDuration:'1.5s'}}></div>
+                                <div className="absolute inset-0 flex items-center justify-center"><Fingerprint size={64} className="text-blue-500 animate-pulse"/></div>
+                            </div>
+                            <h3 className="text-blue-400 font-black uppercase tracking-[0.5em] text-sm italic">UNSEALING QUANTUM NODE...</h3>
+                        </div>
+                    )}
+                    <div className={`glass-dark w-full max-w-sm rounded-[3.5rem] p-10 transition-all duration-700 ${error ? 'border-rose-500/50 shadow-[0_0_50px_rgba(244,63,94,0.3)] translate-x-1' : 'border-white/10 shadow-2xl'}`}>
+                        <div className="text-center mb-10 relative">
+                            {error && <div className="absolute -top-12 left-0 right-0 text-rose-500 font-black text-xs uppercase tracking-widest animate-bounce italic text-wrap-balance">AUTH ERROR: INCORRECT PIN</div>}
+                            <div className="inline-flex p-5 bg-white/5 rounded-[2rem] border border-white/10 mb-6 shadow-inner relative group">
+                                <Lock size={40} className={`${error ? 'text-rose-500' : 'text-blue-500 transition-colors group-hover:text-indigo-400'}`} />
+                            </div>
+                            <h1 className="text-3xl font-black text-white tracking-tighter uppercase italic neon-text leading-none">Qian AI</h1>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-2">Mbah Marto Secure Gateway</p>
+                        </div>
+                        <div className="flex justify-center gap-4 mb-12">
+                            {[...Array(6)].map((_, i) => (
+                                <div key={i} className={`w-4 h-4 rounded-lg border-2 transition-all duration-300 ${i < pin.length ? 'bg-blue-500 border-blue-500 shadow-[0_0_20px_#3b82f6] scale-125 rotate-45' : 'border-slate-700'}`}></div>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                                <button key={n} onClick={() => handlePin(n.toString())} className="h-16 rounded-2xl bg-white/5 border border-white/5 text-xl font-bold text-white hover:bg-white/10 hover:border-blue-500/30 active:scale-90 transition-all focus:outline-none">{n}</button>
+                            ))}
+                            <button onClick={() => setPin('')} className="h-16 rounded-2xl bg-rose-500/10 text-rose-500 font-bold flex items-center justify-center hover:bg-rose-500/20 transition-all"><X size={28}/></button>
+                            <button onClick={() => handlePin('0')} className="h-16 rounded-2xl bg-white/5 border border-white/5 text-xl font-bold text-white hover:bg-white/10 active:scale-90 transition-all focus:outline-none">0</button>
+                            <div className="h-16 rounded-2xl bg-blue-600/10 text-blue-500 flex items-center justify-center opacity-40"><ShieldCheck size={28}/></div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
 
-   const addNotification = (type: any, title: string, message: string) => {
-      setNotifications(prev => [{ id: Date.now().toString(), type, title, message, timestamp: new Date(), read: false }, ...prev]);
-   };
+        // --- APP ROOT ---
+        function App() {
+            const [user, setUser] = useState(null);
+            const [data, setData] = useState(null);
+            const [loading, setLoading] = useState(false);
+            
+            useEffect(() => {
+                const saved = localStorage.getItem('qian_v2_auth');
+                if (saved) setUser(JSON.parse(saved));
+            }, []);
 
-   const handleLogin = (email: string) => {
-      const saved = localStorage.getItem('qian_profile');
-      if(saved) setUser(JSON.parse(saved));
-      else { setUser({ email, name: 'Elang Rimbawan', businessName: 'Warung Makan Mbah Marto', businessType: '', outletsCount: 1, phoneNumber: '', address: '' } as UserProfile); setShowSetup(true); }
-      addNotification('success', 'Login Berhasil', 'Selamat datang Mas Elang.');
-   };
+            useEffect(() => {
+                if (user) {
+                    setLoading(true);
+                    fetch(APPS_SCRIPT_URL + '?filter=MTD').then(res => res.json())
+                        .then(json => setData(json))
+                        .catch(() => setData(getMockData()))
+                        .finally(() => setLoading(false));
+                }
+            }, [user]);
 
-   if (!user) return <LoginPage onLogin={handleLogin} />;
+            const handleLogin = (u) => {
+                localStorage.setItem('qian_v2_auth', JSON.stringify(u));
+                setUser(u);
+            };
 
-   return (
-      <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-         <Header profile={user} onLogout={() => window.location.reload()} notifications={notifications} onReadNotif={() => setNotifications(prev => prev.map(n => ({...n, read: true})))} onEditProfile={() => setShowSetup(true)} />
+            if (!user) return <LoginPage onLogin={handleLogin} />;
 
-         <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-               <div>
-                  <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Executive Dashboard</h2>
-                  <p className="text-slate-500 mt-1">Pantauan Bisnis Mas Elang & Tim.</p>
-               </div>
-               <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Calendar className="h-4 w-4 text-slate-400" /></div>
-                  <select value={filter} onChange={(e) => setFilter(e.target.value)} className="appearance-none bg-white border border-slate-200 text-slate-700 py-2.5 pl-10 pr-10 rounded-xl font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer hover:border-blue-300 transition-all">
-                     <option value="MTD">Bulan Ini (MTD)</option>
-                     <option value="Last Month">Bulan Lalu</option>
-                     <option value="YTD">Tahun Ini (YTD)</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"><ChevronDown className="h-4 w-4 text-slate-400" /></div>
-               </div>
-            </div>
+            return (
+                <div className="min-h-screen pb-24 bg-slate-50">
+                    <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
+                        <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.scrollTo({top:0, behavior:'smooth'})}>
+                            <div className="bg-blue-600 p-2 rounded-2xl text-white transition-all group-hover:rotate-12 group-hover:scale-110 shadow-lg shadow-blue-200">
+                                <ChefHat size={22}/>
+                            </div>
+                            <div className="min-w-0">
+                                <h1 className="font-black text-lg text-slate-800 tracking-tighter uppercase italic leading-none">Qian AI</h1>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 italic hidden sm:block">Business Intelligence</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => {localStorage.removeItem('qian_v2_auth'); window.location.reload();}} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><LogOut size={22}/></button>
+                        </div>
+                    </header>
 
-            {loading && !data && (<div className="h-96 flex flex-col items-center justify-center text-slate-400 gap-3"><RefreshCw className="h-10 w-10 animate-spin text-indigo-500"/><p className="font-medium animate-pulse">Menyiapkan Data Warung Mbah Marto...</p></div>)}
+                    <main className="max-w-4xl mx-auto p-4 md:p-8 space-y-12">
+                        <div className="space-y-1 animate-in px-1">
+                            <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Warung Mbah Marto</h2>
+                            <p className="text-slate-500 font-extrabold uppercase text-[10px] tracking-widest italic opacity-80 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> 
+                                Administrator: Elang Rimbawan
+                            </p>
+                        </div>
 
-            {data && (
-               <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                  {data.fraud_alerts.some(a => a.risk !== 'Safe') && (<div className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-start gap-4 shadow-sm"><ShieldAlert className="h-6 w-6 text-red-600 mt-1 animate-pulse" /><div className="flex-1"><h3 className="font-bold text-red-800">Peringatan Keamanan Terdeteksi</h3><p className="text-sm text-red-700 mt-1">Sistem AI menemukan anomali transaksi.</p></div><Button variant="destructive" size="sm" onClick={() => setSelectedFraudAlert(data.fraud_alerts.find(a => a.risk !== 'Safe')!)}>Periksa</Button></div>)}
+                        {loading && !data ? (
+                            <div className="h-96 flex flex-col items-center justify-center gap-6 text-center">
+                                <div className="relative w-20 h-20">
+                                    <div className="absolute inset-0 border-[6px] border-blue-500/10 rounded-full"></div>
+                                    <div className="absolute inset-0 border-[6px] border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] animate-pulse italic">Accessing Neural Database...</p>
+                            </div>
+                        ) : data && (
+                            <>
+                                <FinancialSection data={data} />
+                                <SalesPotentialSection data={data} />
+                                <BillTrackerSection data={data} />
+                                <RecommendationCenter data={data} />
+                                <AiCommandCenter data={data} />
+                            </>
+                        )}
+                    </main>
+                    
+                    <div className="fixed bottom-8 right-6 z-50">
+                        <button className="bg-slate-900 w-14 h-14 md:w-16 md:h-16 rounded-[2.2rem] shadow-2xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 group relative border border-white/10 ring-4 ring-slate-100">
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full border-2 border-white animate-bounce"></div>
+                            <MessageSquare className="group-hover:hidden" size={20}/>
+                            <Sparkles className="hidden group-hover:block animate-pulse text-blue-400" size={20}/>
+                        </button>
+                    </div>
+                </div>
+            );
+        }
 
-                  <FinancialSection data={data} />
-                  <div key={filter}><SalesPotentialSection data={data} /></div>
-                  <div key={`bills-${filter}`}><BillTrackerSection data={data} /></div>
-                  <RecommendationCenter data={data} />
-                  
-                  {/* AI COMMAND CENTER (Moved to Bottom) */}
-                  <AiCommandCenter data={data} />
-               </div>
-            )}
-         </main>
-
-         <ChatAssistant data={data} />
-         {showSetup && <ProfileSetupModal initialData={user} onSave={(d:any)=>{setUser({...user,...d}); setShowSetup(false);}} onClose={()=>setShowSetup(false)} />}
-         {selectedFraudAlert && <FraudDetailModal alert={selectedFraudAlert} onClose={() => setSelectedFraudAlert(null)} />}
-      </div>
-   );
-}
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
